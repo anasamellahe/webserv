@@ -1,11 +1,16 @@
 #pragma once
 #include "webserv.hpp"
 
+struct testSocketData;
 class sock
 {
 private:
-    int sockFD;
+    std::vector<int> sockFDs;
 public:
+
+    sock(testSocketData data);
+    void bindINET(testSocketData data);
+    void closeFDs(const char *msg);
     class sockException : public std::exception
     {
         private:
@@ -15,9 +20,7 @@ public:
             const char *what() const throw();
             ~sockException() throw();
     };
-    sock(int domain , int type, int protocol);
-    int getFD() const;
-    void bindINET(int AF_addres, int port, int addres);
+    std::vector<int> getFDs() const;
     ~sock();
 };
 

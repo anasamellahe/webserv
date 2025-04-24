@@ -8,45 +8,72 @@
 #include <exception>
 #include <poll.h>
 #include <vector>
+#include <map>
+#include <utility>
+
+void binds(int f, int f2)
+{
+    sockaddr_in s;
+    s.sin_family  = AF_INET;
+    s.sin_port = htons(8080);
+    s.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(f, (sockaddr *)&s, sizeof(s)) < 0)
+        std::cout << "error bind\n";
+
+    s.sin_family  = AF_INET;
+    s.sin_port = htons(5050);
+    s.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(f2, (sockaddr *)&s, sizeof(s)) < 0)
+        std::cout << "error bind\n";
+    if (listen(f, 5) < 0)
+        std::cout << "error listen fail\n";
+    if (listen(f2, 5) < 0)
+        std::cout << "error listen fail\n";
+}
 
 int main ()
 {
-    int sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-    if (sockfd == -1)
-        return 120;
-    sockaddr_in sd;
-    sd.sin_addr.s_addr = INADDR_ANY;
-    sd.sin_family = AF_INET;
-    sd.sin_port = htons(8080);
+   int f, f1;
 
+   if ((  f = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    std::cout << "error create socket fail\n";
+   if (( f1 = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    std::cout << "error create socket fail\n";
+    int op = 1;
+    setsockopt(f, SOL_SOCKET, SO_REUSEADDR, &op, sizeof(op));
+    setsockopt(f1, SOL_SOCKET, SO_REUSEADDR, &op, sizeof(op));
+    binds( f,  f1);
+    while (1)
+    {
+        int a , b;
+        a = 0;
+        b = 0;
+        a = accept(f, NULL, NULL);
+        if (a)
+            std::cout << "f accept connection\n";
+        b = accept(f1, NULL, NULL);
+        if (b)
+            std::cout << "f1 accept connection\n";
 
-    std::string response = 
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Type: text/html; charset=utf-8\r\n"
-    "Connection:  keep-alive\r\n"
-    "Content-Length: 310\r\n"
-    "\r\n"
-    "<!DOCTYPE html>\n"
-    "<html>\n"
-    "<head><title>Webserv</title></head>\n"
-    "<body><h1>Hello, Browser!</h1></body>\n"
-    "</html>";
-    std::cout << response.size() << std::endl;
-    if (bind(sockfd, (sockaddr*)&sd, sizeof(sd)) < 0)
-        return 122;
-    if (listen(sockfd, 10)  < 0)
-        return 123;
-    int fd = 0;
-
-
-        if (fd == 0)
-            fd = accept(sockfd, NULL, NULL);
-     
-        int a;
-        a = write(fd, response.c_str(), response.size());
-        std::cout << "hello anas amellahe\n";
-        sleep(20);
-        std::cout << "hello anas amellahe2\n";
-        a = write(fd, response.c_str(), response.size());
-        std::cout << "a is  " << a << std::endl;
+    }
 }
+
+
+#server
+{
+    port = 8080
+    server-name = anas.com
+}
+#server
+{
+    port = [8080, 8081]
+    server-name = sami.com
+}
+#server
+{
+    port = [5050, 5555]
+    server-name = test.com
+}
+

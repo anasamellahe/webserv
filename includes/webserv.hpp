@@ -13,9 +13,11 @@
 #include <exception>
 #include <poll.h>
 
-#include "sock.hpp"
 #include "monitorClient.hpp"
 #include <string.h>
 #include <errno.h>
 
-
+struct testSocketData
+{
+    std::vector<int> ports;
+};
