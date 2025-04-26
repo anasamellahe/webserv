@@ -209,6 +209,7 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
     Config::RouteConfig* currentRoute = NULL;
     bool isServerSection = false;
     bool isRouteSection = false;
+    bool hasRootDirective = false;
 
     while (std::getline(file, line)) {
         // Skip empty lines and trim whitespace
@@ -246,7 +247,10 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
                 isServerSection = true;
                 isRouteSection = false;
             }
-            else if (line.find("#route") != std::string::npos) {
+            else if (line.find("#root") != std::string::npos) {
+                hasRootDirective = true;
+            }
+            else if (line.find("#root") != std::string::npos) {
                 if (currentServer == NULL) {
                     std::cerr << "Error: Route defined outside of server context" << std::endl;
                     // Clean up resources before returning
@@ -397,6 +401,27 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
         delete currentServer;
     }
     
+    // Set default port 8080 if no port is specified in any server
+    for (size_t i = 0; i < config.servers.size(); i++) {
+        if (config.servers[i].ports.empty()) {
+            config.servers[i].ports.push_back(8080);
+        }
+        // Host is already initialized to 0.0.0.0 by default
+    }
+    
+    // Check for duplicate server names across servers
+    std::map<std::string, bool> serverNameMap;
+    for (size_t i = 0; i < config.servers.size(); i++) {
+        for (const auto& name : config.servers[i].server_names) {
+            if (serverNameMap.find(name) != serverNameMap.end()) {
+                std::cerr << "Error: Duplicate server_name '" << name 
+                          << "' detected across multiple servers" << std::endl;
+                return -1;
+            }
+            serverNameMap[name] = true;
+        }
+    }
+    
     // Check for duplicate redirects in routes within each server
     for (size_t i = 0; i < config.servers.size(); i++) {
         std::map<std::string, bool> pathMap; // map to track paths
@@ -412,6 +437,11 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
             }
             pathMap[path] = true;
         }
+    }
+    
+    // Print a message if no root directive was found
+    if (!hasRootDirective && config.servers.size() > 0) {
+        std::cerr << "Warning: no \"root\" directive in server" << std::endl;
     }
     
     file.close();
@@ -454,6 +484,8 @@ void ConfigParser::printConfig(const Config& config) const
         }
         std::cout << "  Client Max Body Size: " << server.client_max_body_size << std::endl;
         std::cout << "  Default Server: " << (server.default_server ? "true" : "false") << std::endl;
+
+        std::cout << "  Routes:" << std::endl;
 
         for (const auto& route : server.routes) {
             std::cout << "  Route:" << std::endl;

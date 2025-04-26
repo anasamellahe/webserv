@@ -20,6 +20,7 @@ int main (int ac , char **av)
                 parse_congfig = config_parser.parseConfigFile(config_file, config);
                 if (parse_congfig == 0)
                 {
+                
                     config_parser.printConfig(config);
                 }
             }
