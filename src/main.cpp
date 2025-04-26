@@ -34,6 +34,5 @@ int main (int ac , char **av)
             std::cerr << "Exception: " << e.what() << std::endl;
             return 1;
        }
-       int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     
 }

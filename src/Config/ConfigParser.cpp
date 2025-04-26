@@ -247,10 +247,9 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
                 isServerSection = true;
                 isRouteSection = false;
             }
-            else if (line.find("#root") != std::string::npos) {
-                hasRootDirective = true;
-            }
-            else if (line.find("#root") != std::string::npos) {
+            else if (line.find("#route") != std::string::npos) { 
+                 
+                  hasRootDirective = true;
                 if (currentServer == NULL) {
                     std::cerr << "Error: Route defined outside of server context" << std::endl;
                     // Clean up resources before returning
@@ -442,6 +441,7 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
     // Print a message if no root directive was found
     if (!hasRootDirective && config.servers.size() > 0) {
         std::cerr << "Warning: no \"root\" directive in server" << std::endl;
+        return -1;
     }
     
     file.close();
@@ -487,7 +487,10 @@ void ConfigParser::printConfig(const Config& config) const
 
         std::cout << "  Routes:" << std::endl;
 
-        for (const auto& route : server.routes) {
+        for (std::vector<Config::RouteConfig>::const_iterator routeIt = server.routes.begin(); 
+             routeIt != server.routes.end(); 
+             ++routeIt) {
+            const Config::RouteConfig& route = *routeIt;
             std::cout << "  Route:" << std::endl;
             std::cout << "    Path: " << route.path << std::endl;
             std::cout << "    Root: " << route.root << std::endl;

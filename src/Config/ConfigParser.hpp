@@ -77,7 +77,7 @@ struct Config {
 class ConfigParser 
 {
     private:
-        std::vector<std::pair<std::string, int>> server_listen_addresses;  
+        std::vector<std::pair<std::string, int> > server_listen_addresses;  
     public : 
         ConfigParser() {}
         ~ConfigParser() {}
@@ -88,8 +88,8 @@ class ConfigParser
         void printConfig(const Config& config) const;
 
         void initializeServerListenAddresses(const Config& config);
-        std::vector<std::pair<std::string, int>> getServerListenAddresses() const;
-             void  printServerListenAddresses(std::vector<std::pair<std::string, int>> server_listen_addresses);
+        std::vector<std::pair<std::string, int> > getServerListenAddresses() const;
+             void  printServerListenAddresses(std::vector<std::pair<std::string, int> > server_listen_addresses);
 
     
 };

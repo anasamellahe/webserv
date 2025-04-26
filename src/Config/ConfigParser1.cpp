@@ -28,12 +28,12 @@ void ConfigParser::initializeServerListenAddresses(const Config& config)
 }
 
 
-std::vector<std::pair<std::string, int>> ConfigParser::getServerListenAddresses() const
+std::vector<std::pair<std::string, int> > ConfigParser::getServerListenAddresses() const
 {
     return this->server_listen_addresses;
 }
 
-void ConfigParser::printServerListenAddresses(std::vector<std::pair<std::string, int>> server_listen_addresses)
+void ConfigParser::printServerListenAddresses(std::vector<std::pair<std::string, int> > server_listen_addresses)
 {
     std::cout << "Server Listen Addresses:" << std::endl;
     for (size_t i = 0; i < server_listen_addresses.size(); ++i) {
