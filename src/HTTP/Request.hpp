@@ -22,10 +22,10 @@ private:
     std::string requestContent;
     std::string method;             
     std::string path;                
-    std::string version;            
+    std::string version;        
     std::map<std::string, std::string> headers;
     std::string body;             
-
+ 
     std::map<std::string, std::string> query_params; 
     std::map<std::string, FilePart> uploads;       
     std::string cgi_extension;                     
@@ -38,19 +38,19 @@ private:
     bool is_chunked;                                 
     std::vector<std::string> chunks;                 
     
-    void parseRequestLine(const std::string& line); // sami
+    bool parseRequestLine(const std::string& line);
 
-    void parseHeaders(const std::string& headers_text); // anas
+    bool parseHeaders(const std::string& headers_text); 
 
-    void parseBody(const std::string& body_data);
+    bool parseBody(const std::string& body_data);
 
-    void parseQueryString(const std::string& query_string);
+    bool parseQueryString(const std::string& query_string);
 
-    void parseMultipartBody(const std::string& boundary);
+    bool parseMultipartBody(const std::string& boundary);
 
-    void parseChunkedTransfer(const std::string& chunked_data);
-    void extractCgiInfo();
-    void parseCookies();
+    bool parseChunkedTransfer(const std::string& chunked_data);
+    bool extractCgiInfo();
+    bool parseCookies();
     bool validateMethod() const;
     bool validatePath() const;
     bool validateVersion() const;

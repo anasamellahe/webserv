@@ -1,141 +1,145 @@
-#include "Request.hpp"
+// #include "Request.hpp"
 
 
 
-request::request(int clientFD)
-{
-    char buff[1024];
-    this->clientFD = clientFD;
-
-    //handdel 
-    //read request
-
-}
-request::~request()
-{
-
-}
-
-// bool parse(const std::string& raw_request)
+// request::request(int clientFD)
 // {
+//     char buff[1024];
+//     this->clientFD = clientFD;
+
+//     //handdel 
+//     //read request
 
 // }
-// bool parseFromSocket(int socket_fd)
+sami read ()
+
+getErrorCheck()
+
+// request::~request()
 // {
 
 // }
 
+// // bool parse(const std::string& raw_request)
+// // {
 
-void request::setMethod(const std::string& method)
-{
-
-}
-void request::setPath(const std::string& path)
-{
-
-}
-void request::setVersion(const std::string& version)
-{
-
-}
-void request::setHeader(const std::string& key, const std::string& value)
-{
-
-}
-void request::setBody(const std::string& body)
-{
-
-}
-void request::setClientFD(int fd)
-{
-
-}
-void request::setClientAddr(const sockaddr_in& addr)
+// // }
+bool parseFromSocket(int socket_fd)
 {
 
 }
 
-std::string request::getMethod() const
-{
 
-}
-std::string request::getPath() const
-{
+// void request::setMethod(const std::string& method)
+// {
 
-}
-std::string request::getVersion() const
-{
+// }
+// void request::setPath(const std::string& path)
+// {
 
-}
-std::string request::getHeader(const std::string& key) const
-{
+// }
+// void request::setVersion(const std::string& version)
+// {
 
-}
-std::string request::getBody() const
-{
+// }
+// void request::setHeader(const std::string& key, const std::string& value)
+// {
 
-}
-int request::getClientFD() const
-{
+// }
+// void request::setBody(const std::string& body)
+// {
 
-}
-sockaddr_in request::getClientAddr() const
-{
+// }
+// void request::setClientFD(int fd)
+// {
 
-}
+// }
+// void request::setClientAddr(const sockaddr_in& addr)
+// {
 
-void request::validateRequest()
-{
+// }
 
-}
-void request::setErrorCode(const std::string& error_code)
-{
+// std::string request::getMethod() const
+// {
 
-}
-std::string request::getErrorCode() const
-{
+// }
+// std::string request::getPath() const
+// {
 
-}
-std::map<std::string, std::string> request::getQueryParams() const
-{
+// }
+// std::string request::getVersion() const
+// {
 
-}
-std::map<std::string, FilePart> request::getUploads() const
-{
+// }
+// std::string request::getHeader(const std::string& key) const
+// {
 
-}
-std::map<std::string, std::string> request::getCGIEnv() const
-{
+// }
+// std::string request::getBody() const
+// {
 
-}
-std::string request::getCGIExtension() const
-{
+// }
+// int request::getClientFD() const
+// {
 
-}
-std::map<std::string, std::string> request::getCookies() const
-{
+// }
+// sockaddr_in request::getClientAddr() const
+// {
 
-}
-bool request::isChunked() const
-{
+// }
 
-}
-std::vector<std::string> request::getChunks() const
-{
+// void request::validateRequest()
+// {
 
-}
-void request::addQueryParam(const std::string& key, const std::string& value)
-{
+// }
+// void request::setErrorCode(const std::string& error_code)
+// {
 
-}
-void request::addUpload(const std::string& key, const FilePart& file_part)
-{
+// }
+// std::string request::getErrorCode() const
+// {
 
-}
+// }
+// std::map<std::string, std::string> request::getQueryParams() const
+// {
 
-bool request::isValid()
-{
+// }
+// std::map<std::string, FilePart> request::getUploads() const
+// {
 
-}
+// }
+// std::map<std::string, std::string> request::getCGIEnv() const
+// {
+
+// }
+// std::string request::getCGIExtension() const
+// {
+
+// }
+// std::map<std::string, std::string> request::getCookies() const
+// {
+
+// }
+// bool request::isChunked() const
+// {
+
+// }
+// std::vector<std::string> request::getChunks() const
+// {
+
+// }
+// void request::addQueryParam(const std::string& key, const std::string& value)
+// {
+
+// }
+// void request::addUpload(const std::string& key, const FilePart& file_part)
+// {
+
+// }
+
+// bool request::isValid()
+// {
+
+// }
 
     

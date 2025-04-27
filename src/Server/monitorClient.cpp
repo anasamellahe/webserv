@@ -1,4 +1,5 @@
 #include "monitorClient.hpp"
+#include "../HTTP/Request.hpp"
 
     // int socketAddres;
     // std::vector<pollfd> fds;
@@ -47,24 +48,27 @@
         this->fds.erase(it);
         this->fdsTracker.erase(it->fd);
     }
-    int monitorClient::readClientRequest(int clientFd)
+int monitorClient::readClientRequest(int clientFd)
+{
+    request req(clientFd);
+    
+    bool parseSuccess = req.parseFromSocket(clientFd);
+    
+    if (!parseSuccess || !req.isValid())
     {
-
-        // int readByte;
-        // std::string request;
-        // char buff[100];
-        // std::cout << "start reading \n";
-        // while ((readByte = read(clientFd, buff, 100)) > 0)
-        //     request.append(buff, readByte);
-        // std::cout << "\n\n" << readByte <<"\n\n";
-        // if (readByte == -1 && (errno == EAGAIN || errno == EWOULDBLOCK) && request.empty())
-        //     return 1;
-        // if (readByte == 0)
-        //     return (std::cerr << strerror(errno) << readByte << "\n", 0);
-        // fdsTracker[clientFd].request = request;
-        // std::cout << request << "\n #####################\n";
-        return 1;
+        std::cerr << "[ERROR] can't read the request or invalid request\n";
+        return 0; // Signal to close the connection
     }
+    
+    // Store the request in the client tracker for later use
+    fdsTracker[clientFd].request = req.getBody();
+    
+    // If we have a Connection: close header, return 0 to close after response
+    if (req.getHeader("Connection") == "close")
+        return 0;
+        
+    return 1; // Keep connection alive by default
+}
     void monitorClient::writeClientResponse(int clientFd)
     {
         std::string response = 
