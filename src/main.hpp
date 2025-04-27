@@ -11,6 +11,8 @@
 #include <sys/socket.h>
 #include <fcntl.h>
 #include "Config/ConfigParser.hpp"
+#include "Server/includes/sock.hpp"
+#include "Server/includes/webserv.hpp"
 
 #endif 
 
