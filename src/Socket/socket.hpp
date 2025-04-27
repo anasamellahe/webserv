@@ -1,16 +1,16 @@
 #pragma once
-#include "webserv.hpp"
-#include "monitorClient.hpp"
+#include "../main.hpp"
 
 struct testSocketData;
 class sock
 {
 private:
     std::vector<int> sockFDs;
+    std::vector<std::pair<std::string, int> > hosts;
 public:
 
-    sock(testSocketData data);
-    void bindINET(testSocketData data);
+    sock(std::vector<std::pair<std::string, int> > hosts);
+    void bindINET();
     void closeFDs(const char *msg);
     class sockException : public std::exception
     {

@@ -1,20 +1,27 @@
-#ifndef WEBSERVER_MAIN_HPP
-#define WEBSERVER_MAIN_HPP
+#pragma once
 
-#include <sys/types.h>
+#include <fcntl.h>
+#include <vector>
+#include <map>
+#include <utility>
 #include <iostream>
 #include <string>
-#include <vector>
 #include <algorithm>
-#include <poll.h>
-#include <unistd.h>
 #include <sys/socket.h>
-#include <fcntl.h>
-#include "Config/ConfigParser.hpp"
-#include "Server/includes/sock.hpp"
-#include "Server/includes/webserv.hpp"
+#include <netinet/in.h>
+#include <cstring>
+#include <unistd.h>
+#include <exception>
+#include <poll.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <arpa/inet.h>
 
-#endif 
+#include "Socket/socket.hpp"
+#include "Config/ConfigParser.hpp"
+#include "Server/monitorClient.hpp"
+
+
 
 
 

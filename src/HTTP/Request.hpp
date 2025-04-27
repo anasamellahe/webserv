@@ -18,6 +18,8 @@ struct FilePart {
 class request 
 {
 private:
+    int clientFD;
+    std::string requestContent;
     std::string method;             
     std::string path;                
     std::string version;            
@@ -27,8 +29,7 @@ private:
     std::map<std::string, std::string> query_params; 
     std::map<std::string, FilePart> uploads;       
     std::string cgi_extension;                     
-    std::map<std::string, std::string> cgi_env;      
-    int client_fd;                                  
+    std::map<std::string, std::string> cgi_env;                                       
     sockaddr_in client_addr;                         
     bool is_valid;                                   
     std::string error_code;                         
@@ -37,11 +38,16 @@ private:
     bool is_chunked;                                 
     std::vector<std::string> chunks;                 
     
-    void parseRequestLine(const std::string& line);
-    void parseHeaders(const std::string& headers_text);
+    void parseRequestLine(const std::string& line); // sami
+
+    void parseHeaders(const std::string& headers_text); // anas
+
     void parseBody(const std::string& body_data);
+
     void parseQueryString(const std::string& query_string);
+
     void parseMultipartBody(const std::string& boundary);
+
     void parseChunkedTransfer(const std::string& chunked_data);
     void extractCgiInfo();
     void parseCookies();
@@ -50,7 +56,7 @@ private:
     bool validateVersion() const;
 
 public:
-    request();
+    request(int clientFD);
     ~request();
     
     bool parse(const std::string& raw_request);

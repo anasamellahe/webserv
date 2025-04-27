@@ -1,4 +1,4 @@
-#include "includes/sock.hpp"
+#include "socket.hpp"
 
 sock::sockException::sockException(std::string msg)
 {
@@ -12,10 +12,10 @@ sock::sockException::~sockException()  throw()
 {}
 
 
-sock::sock(testSocketData data)
+sock::sock(std::vector<std::pair<std::string, int> > hosts) : hosts(hosts)
 {
     int fd, op;
-    for (size_t i = 0; i < data.ports.size(); i++)
+    for (size_t i = 0; i < hosts.size(); i++)
     {
         fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
         if (fd < 0)
@@ -26,23 +26,24 @@ sock::sock(testSocketData data)
         sockFDs.push_back(fd);
     }
     std::cout  << "Server: socket created successfully \n";
-    bindINET(data);
+    bindINET();
 }
 
-void sock::bindINET(testSocketData data)
+void sock::bindINET()
 {
     sockaddr_in bindSocket;
-    for (size_t i = 0; i < data.ports.size(); i++)
+    for (size_t i = 0; i < hosts.size(); i++)
     {
         bindSocket.sin_family = AF_INET;
-        bindSocket.sin_port = htons(data.ports[i]);
-        bindSocket.sin_addr.s_addr = INADDR_ANY;
-
+        bindSocket.sin_port = htons(hosts[i].second);
+        // bindSocket.sin_addr.s_addr = INADDR_ANY;
+        if (!inet_pton(AF_INET, hosts[i].first.c_str(), &bindSocket.sin_addr.s_addr))
+            closeFDs("[ERROR] inet_pton fail");
         if (bind(sockFDs[i], (sockaddr *)&bindSocket, sizeof(bindSocket)) < 0)
             closeFDs("[ERROR] fail to bound the socket");
         if (listen(sockFDs[i], 100) == -1)
             closeFDs("[ERROR] fail to listen in  the server");
-        std::cout << "Server: Socket bound successfully and start listening on port " << data.ports[i] << std::endl;
+        std::cout << "Server: Socket bound successfully and start listening on port " << hosts[i].second << std::endl;
     }
 }
 

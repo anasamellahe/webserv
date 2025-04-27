@@ -1,4 +1,4 @@
-#include "includes/monitorClient.hpp"
+#include "monitorClient.hpp"
 
     // int socketAddres;
     // std::vector<pollfd> fds;
@@ -19,9 +19,11 @@
     }
     void monitorClient::acceptNewClient(int serverFD)
     {
+       
         int clientFd = accept(serverFD, NULL, NULL);
         if (clientFd == -1)
             throw monitorexception("[ERROR] accept fail \n");
+        
         // make the clientFD file descriptor non-block  
         if (fcntl(clientFd, F_SETFL,  O_NONBLOCK) < 0)
             throw monitorexception("[ERROR]: fcntl fail");
@@ -36,7 +38,7 @@
         // create a client tracker to track the request and response delivery 
         SocketTracker st;
         this->fdsTracker.insert(std::pair<int, SocketTracker>(clientFd, st));
-        std::cout << "new client accepted successfully \n";
+        std::cout << serverFD << " accept new connection " << clientFd << "\n";
     }
     void monitorClient::removeClient(int index)
     {
@@ -47,19 +49,20 @@
     }
     int monitorClient::readClientRequest(int clientFd)
     {
-        int readByte;
-        std::string request;
-        char buff[100];
-        std::cout << "start reading \n";
-        while ((readByte = read(clientFd, buff, 100)) > 0)
-            request.append(buff, readByte);
-        std::cout << "\n\n" << readByte <<"\n\n";
-        if (readByte == -1 && (errno == EAGAIN || errno == EWOULDBLOCK) && request.empty())
-            return 1;
-        if (readByte == 0)
-            return (std::cerr << strerror(errno) << readByte << "\n", 0);
-        fdsTracker[clientFd].request = request;
-        std::cout << request << "\n\n #####################\n\n";
+
+        // int readByte;
+        // std::string request;
+        // char buff[100];
+        // std::cout << "start reading \n";
+        // while ((readByte = read(clientFd, buff, 100)) > 0)
+        //     request.append(buff, readByte);
+        // std::cout << "\n\n" << readByte <<"\n\n";
+        // if (readByte == -1 && (errno == EAGAIN || errno == EWOULDBLOCK) && request.empty())
+        //     return 1;
+        // if (readByte == 0)
+        //     return (std::cerr << strerror(errno) << readByte << "\n", 0);
+        // fdsTracker[clientFd].request = request;
+        // std::cout << request << "\n #####################\n";
         return 1;
     }
     void monitorClient::writeClientResponse(int clientFd)
@@ -93,16 +96,13 @@
             ready = poll(fds.data(), fds.size(), -1);
             if (ready == -1)
                 throw monitorexception("[ERROR] poll fail \n");
-            std::cout << "number of client who are ready is [ "  << ready << " ]\n";
+            // std::cout << "number of client who are ready is [ "  << ready << " ]\n";
             for (size_t i = 0; i < numberOfServers; i++)
             {
                 if (fds[i].revents & POLLIN)
-                {
-                    std::cout << fds[i].fd << "accept new conection\n";
                     acceptNewClient(fds[i].fd);
-                }
             }
-            // std::cout << "number of fds is [ " << fds.size() << " ]" << std::endl;
+
             for (size_t i = numberOfServers; i < fds.size(); i++)
             {
                 int keepAlive = 1;
@@ -119,15 +119,17 @@
                     writeClientResponse(fds[i].fd);
                     fds[i].events &= ~POLLOUT;
                 }
-                if (keepAlive == 0 )
-                    removeClient(i);
-                ready--;
-                if (ready == 0)
-                    break;
+                // if (keepAlive == 0 )
+                // removeClient(i);
+                // ready--;
+                // if (ready == 0)
+                //     break;
             }
         }
     }
     
+
+
 
     monitorClient::~monitorClient()
     {
