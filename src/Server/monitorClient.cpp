@@ -48,47 +48,80 @@
         this->fds.erase(it);
         this->fdsTracker.erase(it->fd);
     }
+
+
+
 int monitorClient::readClientRequest(int clientFd)
 {
     request req(clientFd);
     
+    // Parse the request from the socket
     bool parseSuccess = req.parseFromSocket(clientFd);
     
-    if (!parseSuccess || !req.isValid())
+    // Check if parsing failed or the request is invalid
+    if (!parseSuccess )
     {
-        std::cerr << "[ERROR] can't read the request or invalid request\n";
+        std::cerr << "[ERROR] Can't read the request or invalid request\n";
+       // fdsTracker[clientFd].error = req.getErrorCode(); // Store error code for logging/debugging
         return 0; // Signal to close the connection
     }
+//        std::string key  ;
+//     fdsTracker[clientFd].request = req.getBody();
     
-    // Store the request in the client tracker for later use
-    fdsTracker[clientFd].request = req.getBody();
+//     // Store additional request details in the tracker
+//     fdsTracker[clientFd].method = req.getMethod();
+//     fdsTracker[clientFd].path = req.getPath();
+//     fdsTracker[clientFd].headers = req.getAllHeaders();
+//     fdsTracker[clientFd].queryParams = req.getQueryParams();
+//     fdsTracker[clientFd].cookies = req.getCookies();
     
-    // If we have a Connection: close header, return 0 to close after response
-    if (req.getHeader("Connection") == "close")
-        return 0;
-        
-    return 1; // Keep connection alive by default
-}
-    void monitorClient::writeClientResponse(int clientFd)
-    {
-        std::string response = 
-                                "HTTP/1.1 200 OK\r\n"
-                                "Content-Type: text/html; charset=utf-8\r\n"
-                                "Connection:  keep-alive\r\n"
-                                "Content-Length: 94\r\n"
-                                "\r\n"
-                                "<!DOCTYPE html>\n"
-                                "<html>\n"
-                                "<head><title>Webserv</title></head>\n"
-                                "<body><h1>Hello, Browser!</h1></body>\n"
-                                "</html>";
-        std::cout << "sending response to clinet \n";
-        fdsTracker[clientFd].response = response;
-        int wByte = 0;
-        while ((wByte = write(clientFd,  fdsTracker[clientFd].response.c_str(), fdsTracker[clientFd].response.size())) > 0)
-            fdsTracker[clientFd].response.erase(0, wByte);
-        if (wByte == -1)
-            std::cerr << "[ERROR] can't send the request write error \n";
+//     // If the request is chunked, store the chunks
+//     if (req.isChunked())
+//     {
+//         fdsTracker[clientFd].chunks = req.getChunks();
+//     }
+    
+//     // If there are file uploads, store them
+//     if (!req.getUploads().empty())
+//     {
+//         fdsTracker[clientFd].uploads = req.getUploads();
+//     }
+    
+//     // If the request has a "Connection: close" header, signal to close the connection
+//     if (req.getAllHeaders().count("Connection") && 
+//         req.getAllHeaders().at("Connection") == "close")
+//     {
+//         std::cout << "Client requested to close the connection\n";
+//         fdsTracker[clientFd].WError = 1; // Set write error status
+//         fdsTracker[clientFd].RError = 1; // Set read error status
+//         removeClient(clientFd);
+//         return 0;
+//     }
+    
+//     // Keep the connection alive by default
+//     return 1;
+// }
+//     void monitorClient::writeClientResponse(int clientFd)
+//     {
+//         std::string response = 
+//                                 "HTTP/1.1 200 OK\r\n"
+//                                 "Content-Type: text/html; charset=utf-8\r\n"
+//                                 "Connection:  keep-alive\r\n"
+//                                 "Content-Length: 94\r\n"
+//                                 "\r\n"
+//                                 "<!DOCTYPE html>\n"
+//                                 "<html>\n"
+//                                 "<head><title>Webserv</title></head>\n"
+//                                 "<body><h1>Hello, Browser!</h1></body>\n"
+//                                 "</html>";
+//         std::cout << "sending response to clinet \n";
+//         fdsTracker[clientFd].response = response;
+//         int wByte = 0;
+//         while ((wByte = write(clientFd,  fdsTracker[clientFd].response.c_str(), fdsTracker[clientFd].response.size())) > 0)
+//             fdsTracker[clientFd].response.erase(0, wByte);
+//         if (wByte == -1)
+//             std::cerr << "[ERROR] can't send the request write error \n";
+                  return 1;
     }
     
     void monitorClient::startEventLoop()
@@ -120,7 +153,7 @@ int monitorClient::readClientRequest(int clientFd)
                 if (fds[i].revents & POLLOUT )
                 {
                     std::cout << fds[i].fd <<" ready to start writing to\n";
-                    writeClientResponse(fds[i].fd);
+                    //writeClientResponse(fds[i].fd);
                     fds[i].events &= ~POLLOUT;
                 }
                 // if (keepAlive == 0 )

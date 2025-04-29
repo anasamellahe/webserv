@@ -43,7 +43,7 @@ private:
     bool parseHeaders(const std::string& headers_text); 
 
     bool parseBody(const std::string& body_data);
-
+    bool parse(const std::string& raw_request);
     bool parseQueryString(const std::string& query_string);
 
     bool parseMultipartBody(const std::string& boundary);
@@ -57,12 +57,8 @@ private:
 
 public:
     request(int clientFD);
-    ~request();
     
-    bool parse(const std::string& raw_request);
     bool parseFromSocket(int socket_fd);
-    
-    
     void setMethod(const std::string& method);
     void setPath(const std::string& path);
     void setVersion(const std::string& version);
@@ -74,7 +70,7 @@ public:
     std::string getMethod() const;
     std::string getPath() const;
     std::string getVersion() const;
-    std::string getHeader(const std::string& key) const;
+    std::map<std::string, std::string> getAllHeaders() const;
     std::string getBody() const;
     int getClientFD() const;
     sockaddr_in getClientAddr() const;

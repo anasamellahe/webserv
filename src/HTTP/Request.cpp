@@ -1,33 +1,55 @@
-// #include "Request.hpp"
+#include "Request.hpp"
+#include <unistd.h>
+#include <string>
+#include <sstream>
+#include <iostream>
 
 
 
-// request::request(int clientFD)
-// {
-//     char buff[1024];
-//     this->clientFD = clientFD;
+request::request(int clientFD)
+{
+    this->clientFD = clientFD;
 
-//     //handdel 
-//     //read request
-
-// }
-sami read ()
-
-getErrorCheck()
-
+}
 // request::~request()
 // {
 
 // }
 
-// // bool parse(const std::string& raw_request)
-// // {
 
-// // }
-bool parseFromSocket(int socket_fd)
+bool request::parseRequestLine(const std::string& line)
 {
-
+  
 }
+
+bool request::parseFromSocket(int clientFD)
+{
+    char buffer[1024];
+    ssize_t bytesRead = read(clientFD, buffer, sizeof(buffer) - 1);
+    if (bytesRead <= 0)
+        return false;
+
+    buffer[bytesRead] = '\0'; 
+    requestContent = std::string(buffer);
+    return parse(requestContent);
+}
+
+bool request::parse(const std::string& raw_request)
+{
+    std::istringstream request_stream(raw_request);
+    std::string line;
+
+ if (!std::getline(request_stream, line) || !parseRequestLine(line)) {
+    return false;
+}
+
+
+   
+    return true;
+}
+
+
+
 
 
 // void request::setMethod(const std::string& method)
