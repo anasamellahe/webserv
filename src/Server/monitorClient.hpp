@@ -2,7 +2,6 @@
 #include "../main.hpp"
 #include "../HTTP/Request.hpp"
 
-
 class sock;
 struct FilePart;
 class monitorClient
@@ -30,8 +29,8 @@ class monitorClient
         typedef std::map<int, SocketTracker>::iterator Miterator;
         typedef std::vector<pollfd>::const_iterator CViterator;
         typedef std::map<int, SocketTracker>::const_iterator CMiterator;
-    private:
 
+    private:
         //socket that i ned to monitor with poll
         std::vector<pollfd> fds;
         //number of servers in the fds vector
@@ -40,12 +39,16 @@ class monitorClient
         std::map<int, SocketTracker> fdsTracker;
         void acceptNewClient(int serverFD);
         void removeClient(int index);
-        int readClientRequest(int clientFd);
+        static const size_t CHUNK_SIZE = 8192; // 8KB chunk size
+        int readChunkFromClient(int clientFd, std::string& buffer);
+        int readClientRequest(int clientFd); // Updated to handle 8KB chunks and parsing
+        bool isRequestComplete(SocketTracker& tracker);
+        void parseHeaders(SocketTracker& tracker, size_t headerEnd);
+        bool checkRequestCompletion(SocketTracker& tracker, size_t headerEnd);
+        void handleClientDisconnection(SocketTracker& tracker);
+        void handleReadError(SocketTracker& tracker);
         void writeClientResponse(int clientFd);
-        
 
-    
-        
     public:
         class monitorexception : public std::exception
         {
@@ -59,5 +62,4 @@ class monitorClient
         monitorClient(std::vector<int> serverFDs);
         void startEventLoop();
         ~monitorClient();
-    
 };

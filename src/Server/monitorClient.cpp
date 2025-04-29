@@ -1,5 +1,9 @@
 #include "monitorClient.hpp"
 #include "../HTTP/Request.hpp"
+#include <unistd.h>
+#include <cerrno>
+#include <cstring>
+#include <sstream>
 
     // int socketAddres;
     // std::vector<pollfd> fds;
@@ -49,81 +53,53 @@
         this->fdsTracker.erase(it->fd);
     }
 
+int monitorClient::readChunkFromClient(int clientFd, std::string& buffer) {
+    char chunk[CHUNK_SIZE];
+    ssize_t bytesRead = read(clientFd, chunk, CHUNK_SIZE);
 
+    if (bytesRead > 0) {
+        buffer.append(chunk, bytesRead);
+        return bytesRead;
+    } else if (bytesRead == 0) {
+        // Client closed the connection
+        return 0;
+    } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        // No data available, try again later
+        return -1;
+    } else {
+        // Error occurred
+        return -2;
+    }
+}
 
-int monitorClient::readClientRequest(int clientFd)
-{
+int monitorClient::readClientRequest(int clientFd) {
+    auto it = fdsTracker.find(clientFd);
+    if (it == fdsTracker.end()) {
+        return -1; // Client not found
+    }
+
+    SocketTracker& tracker = it->second;
+
+    // Call parseFromSocket to handle reading and parsing
     request req(clientFd);
-    
-    // Parse the request from the socket
     bool parseSuccess = req.parseFromSocket(clientFd);
-    
-    // Check if parsing failed or the request is invalid
-    if (!parseSuccess )
-    {
-        std::cerr << "[ERROR] Can't read the request or invalid request\n";
-       // fdsTracker[clientFd].error = req.getErrorCode(); // Store error code for logging/debugging
-        return 0; // Signal to close the connection
+
+    if (!parseSuccess) {
+        // Parsing failed, log the error and close the connection
+        tracker.error = req.getErrorCode();
+        std::cerr << "[ERROR] Failed to parse request: " << tracker.error << "\n";
+        return -1;
     }
-//        std::string key  ;
-//     fdsTracker[clientFd].request = req.getBody();
-    
-//     // Store additional request details in the tracker
-//     fdsTracker[clientFd].method = req.getMethod();
-//     fdsTracker[clientFd].path = req.getPath();
-//     fdsTracker[clientFd].headers = req.getAllHeaders();
-//     fdsTracker[clientFd].queryParams = req.getQueryParams();
-//     fdsTracker[clientFd].cookies = req.getCookies();
-    
-//     // If the request is chunked, store the chunks
-//     if (req.isChunked())
-//     {
-//         fdsTracker[clientFd].chunks = req.getChunks();
-//     }
-    
-//     // If there are file uploads, store them
-//     if (!req.getUploads().empty())
-//     {
-//         fdsTracker[clientFd].uploads = req.getUploads();
-//     }
-    
-//     // If the request has a "Connection: close" header, signal to close the connection
-//     if (req.getAllHeaders().count("Connection") && 
-//         req.getAllHeaders().at("Connection") == "close")
-//     {
-//         std::cout << "Client requested to close the connection\n";
-//         fdsTracker[clientFd].WError = 1; // Set write error status
-//         fdsTracker[clientFd].RError = 1; // Set read error status
-//         removeClient(clientFd);
-//         return 0;
-//     }
-    
-//     // Keep the connection alive by default
-//     return 1;
-// }
-//     void monitorClient::writeClientResponse(int clientFd)
-//     {
-//         std::string response = 
-//                                 "HTTP/1.1 200 OK\r\n"
-//                                 "Content-Type: text/html; charset=utf-8\r\n"
-//                                 "Connection:  keep-alive\r\n"
-//                                 "Content-Length: 94\r\n"
-//                                 "\r\n"
-//                                 "<!DOCTYPE html>\n"
-//                                 "<html>\n"
-//                                 "<head><title>Webserv</title></head>\n"
-//                                 "<body><h1>Hello, Browser!</h1></body>\n"
-//                                 "</html>";
-//         std::cout << "sending response to clinet \n";
-//         fdsTracker[clientFd].response = response;
-//         int wByte = 0;
-//         while ((wByte = write(clientFd,  fdsTracker[clientFd].response.c_str(), fdsTracker[clientFd].response.size())) > 0)
-//             fdsTracker[clientFd].response.erase(0, wByte);
-//         if (wByte == -1)
-//             std::cerr << "[ERROR] can't send the request write error \n";
-                  return 1;
+
+    // If parsing is successful, check if the request is complete
+    if (req.isComplete()) {
+        return 1; // Request is complete
     }
-    
+
+    // Request is not complete, move to the next client
+    return 0;
+}
+
     void monitorClient::startEventLoop()
     {
         int ready = 0;

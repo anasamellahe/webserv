@@ -38,9 +38,14 @@ private:
     bool is_chunked;                                 
     std::vector<std::string> chunks;                 
     
+    std::string raw_request;
+    std::string status_line;
+    bool headers_parsed = false;
+    bool complete = false;
+
     bool parseRequestLine(const std::string& line);
 
-    bool parseHeaders(const std::string& headers_text); 
+    bool parseHeaders(const std::string& headers_text); // Parse headers from a string
 
     bool parseBody(const std::string& body_data);
     bool parse(const std::string& raw_request);
@@ -59,6 +64,7 @@ public:
     request(int clientFD);
     
     bool parseFromSocket(int socket_fd);
+    bool isComplete() const { return complete; }
     void setMethod(const std::string& method);
     void setPath(const std::string& path);
     void setVersion(const std::string& version);
@@ -92,7 +98,7 @@ public:
 
 };
 
-#endif 
+#endif
 
 
 

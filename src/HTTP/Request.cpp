@@ -17,37 +17,118 @@ request::request(int clientFD)
 // }
 
 
-bool request::parseRequestLine(const std::string& line)
-{
-  
+
+
+bool request::parseFromSocket(int socket_fd) {
+    char buffer[4096];
+    ssize_t bytesRead = read(socket_fd, buffer, sizeof(buffer) - 1);
+
+    if (bytesRead <= 0) {
+        if (bytesRead < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            // No data available yet
+            return false;
+        } else {
+            // Error or connection closed
+            setErrorCode("400 Bad Request");
+            return false;
+        }
+    }
+
+    buffer[bytesRead] = '\0';
+    raw_request.append(buffer, bytesRead);
+
+    // Detect and parse the status line
+    if (status_line.empty()) {
+        size_t firstLineEnd = raw_request.find("\r\n");
+        if (firstLineEnd != std::string::npos) {
+            status_line = raw_request.substr(0, firstLineEnd);
+            if (!parseRequestLine(status_line)) {
+                setErrorCode("400 Bad Request");
+                return false;
+            }
+            raw_request.erase(0, firstLineEnd + 2); // Remove the parsed status line
+        } else {
+            // Status line is incomplete
+            return false;
+        }
+    }
+
+    // Detect headers and send them to parseHeaders
+    size_t headerEnd = raw_request.find("\r\n\r\n");
+    if (headerEnd != std::string::npos) {
+        std::string headers_part = raw_request.substr(0, headerEnd);
+        if (!parseHeaders(headers_part)) {
+            setErrorCode("400 Bad Request");
+            return false;
+        }
+        raw_request.erase(0, headerEnd + 4); // Remove the parsed headers
+        headers_parsed = true;
+    }
+
+    return true;
 }
 
-bool request::parseFromSocket(int clientFD)
-{
-    char buffer[1024];
-    ssize_t bytesRead = read(clientFD, buffer, sizeof(buffer) - 1);
-    if (bytesRead <= 0)
-        return false;
 
-    buffer[bytesRead] = '\0'; 
-    requestContent = std::string(buffer);
-    return parse(requestContent);
-}
 
 bool request::parse(const std::string& raw_request)
 {
     std::istringstream request_stream(raw_request);
     std::string line;
-
- if (!std::getline(request_stream, line) || !parseRequestLine(line)) {
-    return false;
-}
-
-
-   
+    
+    // Get the first line (request line)
+    if (!std::getline(request_stream, line)) {
+        setErrorCode("400 Bad Request");
+        return false;
+    }
+    
+    // Remove trailing \r if present
+    if (line[line.length() - 1] == '\r') {
+        line.erase(line.length() - 1);
+    }
+    
+    // Parse request line
+    if (!parseRequestLine(line)) {
+        return false;
+    }
+    
+    // Find the end of headers
+    size_t header_end = raw_request.find("\r\n\r\n");
+    if (header_end == std::string::npos) {
+        setErrorCode("400 Bad Request");
+        return false;
+    }
+    
+    // Extract headers section
+    std::string headers_section = raw_request.substr(0, header_end);
+    
+    // Parse headers
+    if (!parseHeaders(headers_section)) {
+        return false;
+    }
+    
+    // Process body if present
+    if (header_end + 4 < raw_request.length()) {
+        std::string body_content = raw_request.substr(header_end + 4);
+        
+        // Handle chunked transfer encoding
+        if (is_chunked) {
+            if (!parseChunkedTransfer(body_content)) {
+                return false;
+            }
+        } else {
+            // Regular body
+            if (!parseBody(body_content)) {
+                return false;
+            }
+        }
+    }
+    
+    // Extract CGI info if needed
+    extractCgiInfo();
+    
+    is_valid = true;
     return true;
 }
-
 
 
 
@@ -164,4 +245,3 @@ bool request::parse(const std::string& raw_request)
 
 // }
 
-    
