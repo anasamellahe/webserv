@@ -3,135 +3,114 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#define MAX_HEADER_SIZE 8192 // Define the maximum header size
 
 
 
-request::request(int clientFD)
-{
-    this->clientFD = clientFD;
-
-}
-// request::~request()
-// {
-
-// }
-
-
-
-
-bool request::parseFromSocket(int socket_fd) {
-    char buffer[4096];
-    ssize_t bytesRead = read(socket_fd, buffer, sizeof(buffer) - 1);
-
-    if (bytesRead <= 0) {
-        if (bytesRead < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            // No data available yet
-            return false;
-        } else {
-            // Error or connection closed
-            setErrorCode("400 Bad Request");
-            return false;
-        }
-    }
-
-    buffer[bytesRead] = '\0';
-    raw_request.append(buffer, bytesRead);
-
-    // Detect and parse the status line
-    if (status_line.empty()) {
-        size_t firstLineEnd = raw_request.find("\r\n");
-        if (firstLineEnd != std::string::npos) {
-            status_line = raw_request.substr(0, firstLineEnd);
-            if (!parseRequestLine(status_line)) {
-                setErrorCode("400 Bad Request");
-                return false;
-            }
-            raw_request.erase(0, firstLineEnd + 2); // Remove the parsed status line
-        } else {
-            // Status line is incomplete
-            return false;
-        }
-    }
-
-    // Detect headers and send them to parseHeaders
-    size_t headerEnd = raw_request.find("\r\n\r\n");
-    if (headerEnd != std::string::npos) {
-        std::string headers_part = raw_request.substr(0, headerEnd);
-        if (!parseHeaders(headers_part)) {
-            setErrorCode("400 Bad Request");
-            return false;
-        }
-        raw_request.erase(0, headerEnd + 4); // Remove the parsed headers
-        headers_parsed = true;
-    }
-
-    return true;
+request::request(int clientFD) : clientFD(clientFD), is_valid(false), is_chunked(false), headers_parsed(false), complete(false) {
 }
 
 
 
-bool request::parse(const std::string& raw_request)
-{
-    std::istringstream request_stream(raw_request);
-    std::string line;
-    
-    // Get the first line (request line)
-    if (!std::getline(request_stream, line)) {
-        setErrorCode("400 Bad Request");
-        return false;
-    }
-    
-    // Remove trailing \r if present
-    if (line[line.length() - 1] == '\r') {
-        line.erase(line.length() - 1);
-    }
-    
-    // Parse request line
-    if (!parseRequestLine(line)) {
-        return false;
-    }
-    
-    // Find the end of headers
+
+
+bool request::parseFromSocket(int socket_fd, const std::string& existing_data, int total_bytes_read) {
+    raw_request = existing_data;
     size_t header_end = raw_request.find("\r\n\r\n");
+
+    // Check for incomplete headers
     if (header_end == std::string::npos) {
-        setErrorCode("400 Bad Request");
-        return false;
+        if (raw_request.size() > MAX_HEADER_SIZE) {
+            setErrorCode("431 Request Header Fields Too Large");
+            return false;
+        }
+        return false; // Need more data
     }
-    
-    // Extract headers section
-    std::string headers_section = raw_request.substr(0, header_end);
-    
-    // Parse headers
-    if (!parseHeaders(headers_section)) {
-        return false;
-    }
-    
-    // Process body if present
-    if (header_end + 4 < raw_request.length()) {
-        std::string body_content = raw_request.substr(header_end + 4);
+
+    // Parse complete request
+    return parse(raw_request);
+}
+bool request::parse(const std::string& raw_request) {
+    try {
+        std::istringstream request_stream(raw_request);
+        std::string line;
+
+        if (!std::getline(request_stream, line)) {
+            setErrorCode("400 Bad Request");
+            return false;
+        }
+
+        if (!line.empty() && line.back() == '\r') {
+            line.erase(line.size() - 1);
+        }
         
-        // Handle chunked transfer encoding
+        if (!parseRequestLine(line)) {
+            return false;
+        }
+
+        // --- Header Section Parsing ---
+        size_t header_end = raw_request.find("\r\n\r\n");
+        if (header_end == std::string::npos) {
+            setErrorCode("400 Bad Request");
+            return false;
+        }
+
+        std::string headers_section = raw_request.substr(0, header_end);
+        if (parseHeaders(headers_section)) { // Returns true on error
+            return false;
+        }
+
+        
+
+        // --- Body Processing ---
+        std::string body_content;
+        if (header_end + 4 < raw_request.length()) {
+            body_content = raw_request.substr(header_end + 4);
+        }
+
+        // --- Chunked Transfer Encoding ---
+
+        // --- Chunked Transfer Handling ---
         if (is_chunked) {
             if (!parseChunkedTransfer(body_content)) {
                 return false;
             }
-        } else {
-            // Regular body
+        } else if (!body_content.empty()) {
             if (!parseBody(body_content)) {
                 return false;
             }
         }
+
+        // --- Post-Processing ---
+        if (!extractCgiInfo()) {  // Ensure this returns false on errors
+            setErrorCode("500 Internal Server Error");
+            return false;
+        }
+
+        // --- Final Validation ---
+        if (!validateMethod() || !validatePath() || !validateVersion()) {
+            setErrorCode("400 Bad Request");
+            return false;
+        }
+
+        is_valid = true;
+        return true;
+
+    } catch (const std::exception& e) {
+        setErrorCode("500 Internal Server Error");
+        return false;
     }
-    
-    // Extract CGI info if needed
-    extractCgiInfo();
-    
-    is_valid = true;
-    return true;
 }
 
 
-
+std::string request::getHeader(const std::string& key) const
+{
+    std::map<std::string, std::string>::const_iterator it = headers.find(key);
+    if (it != headers.end()) {
+        return it->second;
+    }
+    return "";
+}
 
 // void request::setMethod(const std::string& method)
 // {

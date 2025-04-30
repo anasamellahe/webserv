@@ -19,6 +19,8 @@ class request
 {
 private:
     int clientFD;
+    
+
     std::string requestContent;
     std::string method;             
     std::string path;                
@@ -63,7 +65,7 @@ private:
 public:
     request(int clientFD);
     
-    bool parseFromSocket(int socket_fd);
+    bool parseFromSocket(int socket_fd, const std::string& existing_data = "" , int total_bytes_read = 0 );
     bool isComplete() const { return complete; }
     void setMethod(const std::string& method);
     void setPath(const std::string& path);
@@ -88,6 +90,7 @@ public:
     std::map<std::string, FilePart> getUploads() const;
     std::map<std::string, std::string> getCGIEnv() const;
     std::string getCGIExtension() const;
+    std::string request::getHeader(const std::string& headerName) const;
     std::map<std::string, std::string> getCookies() const;
     bool isChunked() const;
     std::vector<std::string> getChunks() const;
