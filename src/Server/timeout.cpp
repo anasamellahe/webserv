@@ -8,10 +8,7 @@
 #include <fcntl.h>  
 
 #define CHUNK_SIZE 8192 // Define the chunk size for reading data
-
- monitorClient::SocketTracker::SocketTracker() : lastActive(time(NULL)), WError(0), RError(0) {
-    // Constructor initializes the last active time to the current time
-    // and sets error statuses to 0
+monitorClient::SocketTracker::SocketTracker() : WError(0), RError(0), lastActive(time(NULL)) {
 }
 bool monitorClient::shouldCheckTimeouts(time_t currentTime) {
     // Determine if enough time has passed to check for timeouts

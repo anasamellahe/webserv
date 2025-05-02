@@ -67,6 +67,7 @@ struct Config {
         std::map<int, std::string> error_pages;
         size_t client_max_body_size;
         bool default_server;
+        bool chunked_transfer;
         std::vector<RouteConfig> routes;
     };
 

@@ -20,6 +20,7 @@ class monitorClient
             int WError;           // Write error status
             int RError;           // Read error status
             time_t lastActive;    // Timestamp of the last activity
+            std::string host;      // Hostname of the client
 
             std::string method;   // HTTP method (e.g., GET, POST)
             std::string path;     // Request path

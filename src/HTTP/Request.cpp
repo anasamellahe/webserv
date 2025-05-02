@@ -15,6 +15,9 @@ request::request(int clientFD) : clientFD(clientFD), is_valid(false), is_chunked
 
 
 bool request::parseFromSocket(int socket_fd, const std::string& existing_data, int total_bytes_read) {
+
+    (void)socket_fd; // Unused parameter
+    (void)total_bytes_read; // Unused parameter
     raw_request = existing_data;
     size_t header_end = raw_request.find("\r\n\r\n");
 
@@ -55,11 +58,7 @@ bool request::parse(const std::string& raw_request) {
             return false;
         }
 
-        std::string headers_section = raw_request.substr(0, header_end);
-        if (parseHeaders(headers_section)) { // Returns true on error
-            return false;
-        }
-
+       
         
 
         // --- Body Processing ---
@@ -202,10 +201,10 @@ std::string request::getHeader(const std::string& key) const
 // {
 
 // }
-// bool request::isChunked() const
-// {
-
-// }
+bool request::isChunked() const
+{
+    return is_chunked;
+}
 // std::vector<std::string> request::getChunks() const
 // {
 

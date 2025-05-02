@@ -21,8 +21,9 @@ int main (int ac , char **av)
             // sock socketCreate(config_parser.getServerListenAddresses());
             config_parser.initializeServerListenAddresses(config);
             sock socketCreate(config_parser.getServerListenAddresses());
-            monitorClient mc(socketCreate.getFDs());
-            mc.startEventLoop();
+            config_parser.printConfig(config);
+            //monitorClient mc(socketCreate.getFDs());
+            //mc.startEventLoop();
         }
         else
             std::cerr << "Error parsing configuration file." << std::endl;
