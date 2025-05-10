@@ -41,3 +41,64 @@ void ConfigParser::printServerListenAddresses(std::vector<std::pair<std::string,
                   << ", Port: " << server_listen_addresses[i].second << std::endl;
     }
 }
+
+void ConfigParser::initializeServerMap(std::map<std::string, Config::ServerConfig>& server_map, const Config& config) const
+{
+    for (size_t i = 0; i < config.servers.size(); ++i) {
+        const Config::ServerConfig& server = config.servers[i];
+        for (size_t j = 0; j < server.server_names.size(); ++j) {
+            server_map[server.server_names[j]] = server;
+        }
+    }
+}
+
+void ConfigParser::initializeRouteMap(std::map<std::string, Config::RouteConfig>& route_map, const Config& config) const
+{
+    for (size_t i = 0; i < config.servers.size(); ++i) {
+        const Config::ServerConfig& server = config.servers[i];
+        for (size_t j = 0; j < server.routes.size(); ++j) {
+            const Config::RouteConfig& route = server.routes[j];
+            route_map[route.path] = route;
+        }
+    }
+}
+
+// Config::ServerConfig ConfigParser::getServerMap(const std::string& host) const
+// {
+
+//     std::string host, port, sserverName;
+
+//     int pos
+//     int tmp;
+//     ....:
+//     127.0.0.1:8080
+//     fscanf("%d.%d.%d:%d", a, a,a,a,a) == 5
+//     host = 127.0.0.1 || empty;
+//     port = 8080 || empty;
+//     serverNAme = anas.com  || empty;
+
+
+//     for (size_t i = 0; i < servers.size(); i++)
+//     {
+//         if (!host.empty() && !port.empty() && servers[i].host == host && servers[i].port == port)
+//             return servers[i];
+//         else if (!ServerName.empty())
+//         {
+//             for (size_t j = 0; j < servers[i].serverNames.size(); j++)
+//             {
+//                 if (serverName == servers[i].serverName[j])
+//                     return servers[i];
+//             }
+//         }
+
+//     }
+    
+
+// }
+
+std::map<std::string, Config::RouteConfig> ConfigParser::getRouteMap() const
+{
+    std::map<std::string, Config::RouteConfig> route_map;
+    initializeRouteMap(route_map, this->config);
+    return route_map;
+}

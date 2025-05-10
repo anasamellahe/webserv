@@ -1,34 +1,115 @@
-// #include "Request.hpp"
+#include "Request.hpp"
+#include <unistd.h>
+#include <string>
+#include <sstream>
+#include <iostream>
+#define MAX_HEADER_SIZE 8192 // Define the maximum header size
 
 
 
-// request::request(int clientFD)
-// {
-//     char buff[1024];
-//     this->clientFD = clientFD;
-
-//     //handdel 
-//     //read request
-
-// }
-sami read ()
-
-getErrorCheck()
-
-// request::~request()
-// {
-
-// }
-
-// // bool parse(const std::string& raw_request)
-// // {
-
-// // }
-bool parseFromSocket(int socket_fd)
-{
-
+request::request(int clientFD) : clientFD(clientFD), is_valid(false), is_chunked(false), headers_parsed(false), complete(false) {
 }
 
+
+
+
+
+bool request::parseFromSocket(int socket_fd, const std::string& existing_data, int total_bytes_read) {
+
+    (void)socket_fd; // Unused parameter
+    (void)total_bytes_read; // Unused parameter
+    raw_request = existing_data;
+    size_t header_end = raw_request.find("\r\n\r\n");
+
+    // Check for incomplete headers
+    if (header_end == std::string::npos) {
+        if (raw_request.size() > MAX_HEADER_SIZE) {
+            setErrorCode("431 Request Header Fields Too Large");
+            return false;
+        }
+        return false; // Need more data
+    }
+
+    // Parse complete request
+    return parse(raw_request);
+}
+bool request::parse(const std::string& raw_request) {
+    try {
+        std::istringstream request_stream(raw_request);
+        std::string line;
+
+        if (!std::getline(request_stream, line)) {
+            setErrorCode("400 Bad Request");
+            return false;
+        }
+
+        if (!line.empty() && line.back() == '\r') {
+            line.erase(line.size() - 1);
+        }
+        
+        if (!parseRequestLine(line)) {
+            return false;
+        }
+
+        // --- Header Section Parsing ---
+        size_t header_end = raw_request.find("\r\n\r\n");
+        if (header_end == std::string::npos) {
+            setErrorCode("400 Bad Request");
+            return false;
+        }
+
+       
+        
+
+        // --- Body Processing ---
+        std::string body_content;
+        if (header_end + 4 < raw_request.length()) {
+            body_content = raw_request.substr(header_end + 4);
+        }
+
+        // --- Chunked Transfer Encoding ---
+
+        // --- Chunked Transfer Handling ---
+        if (is_chunked) {
+            if (!parseChunkedTransfer(body_content)) {
+                return false;
+            }
+        } else if (!body_content.empty()) {
+            if (!parseBody(body_content)) {
+                return false;
+            }
+        }
+
+        // --- Post-Processing ---
+        if (!extractCgiInfo()) {  // Ensure this returns false on errors
+            setErrorCode("500 Internal Server Error");
+            return false;
+        }
+
+        // --- Final Validation ---
+        if (!validateMethod() || !validatePath() || !validateVersion()) {
+            setErrorCode("400 Bad Request");
+            return false;
+        }
+
+        is_valid = true;
+        return true;
+
+    } catch (const std::exception& e) {
+        setErrorCode("500 Internal Server Error");
+        return false;
+    }
+}
+
+
+std::string request::getHeader(const std::string& key) const
+{
+    std::map<std::string, std::string>::const_iterator it = headers.find(key);
+    if (it != headers.end()) {
+        return it->second;
+    }
+    return "";
+}
 
 // void request::setMethod(const std::string& method)
 // {
@@ -120,10 +201,10 @@ bool parseFromSocket(int socket_fd)
 // {
 
 // }
-// bool request::isChunked() const
-// {
-
-// }
+bool request::isChunked() const
+{
+    return is_chunked;
+}
 // std::vector<std::string> request::getChunks() const
 // {
 
@@ -142,4 +223,3 @@ bool parseFromSocket(int socket_fd)
 
 // }
 
-    

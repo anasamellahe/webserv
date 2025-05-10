@@ -19,6 +19,8 @@ class request
 {
 private:
     int clientFD;
+    
+
     std::string requestContent;
     std::string method;             
     std::string path;                
@@ -38,12 +40,16 @@ private:
     bool is_chunked;                                 
     std::vector<std::string> chunks;                 
     
+    std::string raw_request;
+    std::string status_line;
+    bool headers_parsed = false;
+    bool complete = false;
+
     bool parseRequestLine(const std::string& line);
 
-    bool parseHeaders(const std::string& headers_text); 
 
     bool parseBody(const std::string& body_data);
-
+    bool parse(const std::string& raw_request);
     bool parseQueryString(const std::string& query_string);
 
     bool parseMultipartBody(const std::string& boundary);
@@ -57,13 +63,12 @@ private:
 
 public:
     request(int clientFD);
-    ~request();
-    
-    bool parse(const std::string& raw_request);
-    bool parseFromSocket(int socket_fd);
-    
-    
+        bool parseHeaders(const std::string& headers_text); // Parse headers from a string
+
+    bool parseFromSocket(int socket_fd, const std::string& existing_data = "" , int total_bytes_read = 0 );
+    bool isComplete() const { return complete; }
     void setMethod(const std::string& method);
+    void setComplete(bool complete);
     void setPath(const std::string& path);
     void setVersion(const std::string& version);
     void setHeader(const std::string& key, const std::string& value);
@@ -73,8 +78,9 @@ public:
 
     std::string getMethod() const;
     std::string getPath() const;
+    int getContentLength() const;
     std::string getVersion() const;
-    std::string getHeader(const std::string& key) const;
+    std::map<std::string, std::string> getAllHeaders() const;
     std::string getBody() const;
     int getClientFD() const;
     sockaddr_in getClientAddr() const;
@@ -86,6 +92,7 @@ public:
     std::map<std::string, FilePart> getUploads() const;
     std::map<std::string, std::string> getCGIEnv() const;
     std::string getCGIExtension() const;
+    std::string getHeader(const std::string& headerName) const;
     std::map<std::string, std::string> getCookies() const;
     bool isChunked() const;
     std::vector<std::string> getChunks() const;
@@ -96,7 +103,7 @@ public:
 
 };
 
-#endif 
+#endif
 
 
 

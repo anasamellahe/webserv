@@ -67,6 +67,7 @@ struct Config {
         std::map<int, std::string> error_pages;
         size_t client_max_body_size;
         bool default_server;
+        bool chunked_transfer;
         std::vector<RouteConfig> routes;
     };
 
@@ -77,7 +78,10 @@ struct Config {
 class ConfigParser 
 {
     private:
+        Config config; // Store the parsed configuration
         std::vector<std::pair<std::string, int> > server_listen_addresses;  
+        std::map<std::string, Config::ServerConfig> server_map; // Map to store server configurations
+        std::map<std::string, Config::RouteConfig> route_map; // Map to store route configurations
     public : 
         ConfigParser() {}
         ~ConfigParser() {}
@@ -88,10 +92,13 @@ class ConfigParser
         void printConfig(const Config& config) const;
 
         void initializeServerListenAddresses(const Config& config);
-        std::vector<std::pair<std::string, int> > getServerListenAddresses() const;
-             void  printServerListenAddresses(std::vector<std::pair<std::string, int> > server_listen_addresses);
+        void initializeServerMap(std::map<std::string, Config::ServerConfig>& server_map, const Config& config) const;
+        void initializeRouteMap(std::map<std::string, Config::RouteConfig>& route_map, const Config& config) const;
 
-    
+        std::vector<std::pair<std::string, int> > getServerListenAddresses() const;
+        Config::ServerConfig getServerMap(const std::string& server_name) const;
+        std::map<std::string, Config::RouteConfig> getRouteMap() const;
+        void printServerListenAddresses(std::vector<std::pair<std::string, int> > server_listen_addresses);
 };
 
 #endif

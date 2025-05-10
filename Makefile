@@ -1,12 +1,17 @@
 CXX = c++
-CXXFLAGS = -Wall -Wextra -Werror
+CXXFLAGS = -Wall -Wextra -Werror -fPIE
 
 NAME = webserv
 
 SRC_DIR = src
 OBJ_DIR = obj
 
-SRCS = $(wildcard $(SRC_DIR)/*.cpp $(SRC_DIR)/*/*.cpp)
+# Get all source files
+ALL_SRCS = $(wildcard $(SRC_DIR)/*.cpp $(SRC_DIR)/*/*.cpp)
+# Exclude HTTP and Server directories
+EXCLUDE_DIRS = $(wildcard $(SRC_DIR)/HTTP/*.cpp $(SRC_DIR)/Server/*.cpp)
+# Filter out excluded directories
+SRCS = $(filter-out $(EXCLUDE_DIRS), $(ALL_SRCS))
 OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRCS))
 
 INCLUDES = -I./src
