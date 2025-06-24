@@ -11,53 +11,65 @@
 #include <map>
 #include <utility>
 
-void binds(int f, int f2)
+std::map<std::string, std::string>query_params;
+
+void addQueryParam(const std::string& key, const std::string& value)
 {
-    sockaddr_in s;
-    s.sin_family  = AF_INET;
-    s.sin_port = htons(8080);
-    s.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(f, (sockaddr *)&s, sizeof(s)) < 0)
-        std::cout << "error bind\n";
-
-    s.sin_family  = AF_INET;
-    s.sin_port = htons(5050);
-    s.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(f2, (sockaddr *)&s, sizeof(s)) < 0)
-        std::cout << "error bind\n";
-    if (listen(f, 5) < 0)
-        std::cout << "error listen fail\n";
-    if (listen(f2, 5) < 0)
-        std::cout << "error listen fail\n";
+    if (!key.empty())
+        query_params.insert(std::pair<std::string, std::string>(key, value));
 }
 
-// int main ()
-// {
-//    int f, f1;
+void querySpliter(const std::string &query, size_t start, size_t end) 
+{
 
-//    if ((  f = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-//     std::cout << "error create socket fail\n";
-//    if (( f1 = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-//     std::cout << "error create socket fail\n";
-//     int op = 1;
-//     setsockopt(f, SOL_SOCKET, SO_REUSEADDR, &op, sizeof(op));
-//     setsockopt(f1, SOL_SOCKET, SO_REUSEADDR, &op, sizeof(op));
-//     binds( f,  f1);
-//     while (1)
-//     {
-//         int a , b;
-//         a = 0;
-//         b = 0;
-//         a = accept(f, NULL, NULL);
-//         if (a)
-//             std::cout << "f accept connection\n";
-//         b = accept(f1, NULL, NULL);
-//         if (b)
-//             std::cout << "f1 accept connection\n";
+    size_t pos = query.find("=", start);
+    if (pos != std::string::npos || pos <= end)
+    {
+        std::string key = query.substr(start, pos - start);
+        std::string value = query.substr(pos + 1, end - pos);
+        addQueryParam(key, value);
+    }
+}
 
-//     }
-// }
+bool  parseQueryString(std::string &path)
+{
 
+    size_t pos = path.find("?", 0);
 
+    if (pos == std::string::npos)
+        return false;
+    std::string queryParams;
+    queryParams = path.substr(pos + 1, std::string::npos);
+    path.erase(pos);
+    size_t start    = 0;
+    size_t end      = 0;
+    while (start < queryParams.size())
+    {
+        end = queryParams.find("&", start);
+        if (end != std::string::npos)
+        {
+            querySpliter(queryParams, start, end - 1);
+            start = end + 1;
+        }
+        else
+        {
+            querySpliter(queryParams, start, queryParams.length() - 1);
+            break;
+        }    
+    }
+    return true;
+}
+
+int main ()
+{
+    std::cout << "start parsing the query\n";
+    std::string path =  "/home/med?anas=amellahe&test=anasameksgdhg&a=test%20";
+    parseQueryString(path);
+    std::cout <<  path<<std::endl;
+    for (std::map<std::string, std::string>::iterator it = query_params.begin(); it != query_params.end(); it++)
+    {
+        std::cout <<"key == " <<it->first  <<  std::endl;
+        std::cout <<"val == " <<it->second <<  std::endl;
+        std::cout << "*****NEXT*****\n";
+    }
+}

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Config/ConfigParser.hpp"
 #include <vector>
 #include <map>
 #include <string>
@@ -9,7 +10,9 @@
 #include "../Config/ConfigParser.hpp"
 #include "Utils.hpp"
 
+#define MAX_PATH_SIZE 4000 // 4KB 
 #define BAD_REQ "400 Bad Request"
+#define URI_T_LONG "414 URI Too Long"
 #define VERSION_ERR "505 HTTP Version Not Supported"
 
 struct FilePart {
@@ -25,11 +28,16 @@ class request
         typedef std::map<std::string, std::string>::iterator        HeaderIterator;
         typedef std::map<std::string, std::string>::const_iterator  ConstHeaderIterator;
     private:
+
         int clientFD;
+        Config serverConfig;
         std::string requestContent;
         std::string method;             
         std::string path;                
-        std::string version;        
+        std::string version;
+        std::string Host;
+        int         Port;
+        bool        isIp;   
         std::map<std::string, std::string> headers;
         std::string body;             
     
@@ -45,17 +53,19 @@ class request
         bool is_chunked;                                 
         std::vector<std::string> chunks;                 
 
-        void parseStartLine(const std::string& line);
-        void parseHeaders(const std::string& headers_text);
-        bool parseRequestLine(const std::string& line);
+        bool parseRequestLine(const std::string& line); // OK
+        void parseStartLine(const std::string& line); // OK
+        void parseHeaders(const std::string& headers_text);// OK
+        bool parseSingleLineHeader(const std::string line);// OK
+        bool isValidHost(const std::string& Host);
+        
 
-
+        bool parseQueryString(); // OK
+        void parseQueryPair(const std::string &query, size_t start, size_t end); // OK
+        void addQueryParam(const std::string& key, const std::string& value); // OK
 
 
         bool parseBody(const std::string& body_data);
-
-        bool parseQueryString(const std::string& query_string);
-
         bool parseMultipartBody(const std::string& boundary);
 
         bool parseChunkedTransfer(const std::string& chunked_data);
@@ -63,6 +73,7 @@ class request
         bool parseCookies();
         bool validateMethod() const;
         bool validatePath() const;
+        bool validateHost(const std::string& host);
 
     public:
         request(int clientFD);
@@ -72,35 +83,36 @@ class request
         bool parseFromSocket(int socket_fd);
 
 
-        void setMethod(const std::string& method);
-        void setPath(const std::string& path);
-        void setVersion(const std::string& version);
+        void setMethod(const std::string& method); // OK
+        void setPath(const std::string& path); // OK
+        void setVersion(const std::string& version); //OK
         void setHeader(const std::string& key, const std::string& value);
         void setBody(const std::string& body);
         void setClientFD(int fd);
         void setClientAddr(const sockaddr_in& addr);
 
-        std::string getMethod() const;
-        std::string getPath() const;
-        std::string getVersion() const;
-        std::string getHeader(const std::string& key) const;
-        std::string getBody() const;
-        int getClientFD() const;
+        const std::string&    getMethod() const; // OK
+        const std::string&    getPath() const; // OK
+        const std::string&    getVersion() const; // OK
+        const std::string&    getHeader(const std::string& key) const; // OK
+        const std::string&    getBody() const; // OK
+        int getClientFD() const; // OK
         sockaddr_in getClientAddr() const;
 
         void validateRequest();
-        void setErrorCode(const std::string& error_code);
-        std::string getErrorCode() const;
-        std::map<std::string, std::string> getQueryParams() const;
-        std::map<std::string, FilePart> getUploads() const;
-        std::map<std::string, std::string> getCGIEnv() const;
-        std::string getCGIExtension() const;
-        std::map<std::string, std::string> getCookies() const;
-        bool isChunked() const;
-        std::vector<std::string> getChunks() const;
-        void addQueryParam(const std::string& key, const std::string& value);
+        void setErrorCode(const std::string& error_code); // OK
+        const std::string&                          getErrorCode() const; // OK
+        const std::map<std::string, std::string>&   getQueryParams() const; // OK
+        const std::map<std::string, FilePart>&      getUploads() const;
+        const std::map<std::string, std::string>&   getCGIEnv() const;
+        const std::string&                          getCGIExtension() const;
+        const std::map<std::string, std::string>&   getCookies() const;
+        const std::vector<std::string>&             getChunks() const;
+        
         void addUpload(const std::string& key, const FilePart& file_part);
-
+        bool isChunked() const;
         bool isValid();
+
+        Config getserverConfig(std::string serverToFind, const Config& serversConfigs); //   host or serverName
 
 };
