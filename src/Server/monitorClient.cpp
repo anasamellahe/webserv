@@ -1,5 +1,9 @@
 #include "monitorClient.hpp"
 #include "../HTTP/Request.hpp"
+#include <unistd.h>
+#include <cerrno>
+#include <cstring>
+#include <sstream>
 
     // int socketAddres;
     // std::vector<pollfd> fds;
@@ -48,92 +52,70 @@
         this->fds.erase(it);
         this->fdsTracker.erase(it->fd);
     }
-int monitorClient::readClientRequest(int clientFd)
-{
-    request req(clientFd);
-    
-    bool parseSuccess = req.parseFromSocket(clientFd);
-    
-    if (!parseSuccess || !req.isValid())
-    {
-        std::cerr << "[ERROR] can't read the request or invalid request\n";
-        return 0; // Signal to close the connection
-    }
-    
-    // Store the request in the client tracker for later use
-    fdsTracker[clientFd].request = req.getBody();
-    
-    // If we have a Connection: close header, return 0 to close after response
-    if (req.getHeader("Connection") == "close")
-        return 0;
-        
-    return 1; // Keep connection alive by default
-}
-    void monitorClient::writeClientResponse(int clientFd)
-    {
-        std::string response = 
-                                "HTTP/1.1 200 OK\r\n"
-                                "Content-Type: text/html; charset=utf-8\r\n"
-                                "Connection:  keep-alive\r\n"
-                                "Content-Length: 94\r\n"
-                                "\r\n"
-                                "<!DOCTYPE html>\n"
-                                "<html>\n"
-                                "<head><title>Webserv</title></head>\n"
-                                "<body><h1>Hello, Browser!</h1></body>\n"
-                                "</html>";
-        std::cout << "sending response to clinet \n";
-        fdsTracker[clientFd].response = response;
-        int wByte = 0;
-        while ((wByte = write(clientFd,  fdsTracker[clientFd].response.c_str(), fdsTracker[clientFd].response.size())) > 0)
-            fdsTracker[clientFd].response.erase(0, wByte);
-        if (wByte == -1)
-            std::cerr << "[ERROR] can't send the request write error \n";
-    }
-    
-    void monitorClient::startEventLoop()
-    {
+
+
+    void monitorClient::startEventLoop() {
         int ready = 0;
-        while (1)
-        {   
-            std::cout << "monitor event loop started \n";
-            ready = poll(fds.data(), fds.size(), -1);
-            if (ready == -1)
-                throw monitorexception("[ERROR] poll fail \n");
-            // std::cout << "number of client who are ready is [ "  << ready << " ]\n";
-            for (size_t i = 0; i < numberOfServers; i++)
-            {
-                if (fds[i].revents & POLLIN)
-                    acceptNewClient(fds[i].fd);
+        size_t lastProcessedClient = numberOfServers; // Track last processed client index
+        initializeTimeouts();
+        
+        while (1) {   
+            time_t now = time(NULL);
+            if (shouldCheckTimeouts(now)) {
+                checkTimeouts();
+                lastTimeoutCheck = now;
             }
-
-            for (size_t i = numberOfServers; i < fds.size(); i++)
-            {
-                int keepAlive = 1;
-                if (fds[i].revents & POLLIN)
-                {
-                    std::cout << fds[i].fd <<" ready to start reading from\n";
-                    keepAlive = readClientRequest(fds[i].fd);
-                    fds[i].events |= POLLOUT;
+            
+            // Use poll with a short timeout to prevent blocking indefinitely
+            ready = poll(fds.data(), fds.size(), 100); // 100ms timeout
+            if (ready == -1) {
+                if (errno == EINTR) continue;
+                throw monitorexception("[ERROR] poll fail: " + std::string(strerror(errno)));
+            }
+            
+            // Process servers for new connections
+            for (size_t i = 0; i < numberOfServers; i++) {
+                if (fds[i].revents & POLLIN) {
+                    acceptNewClient(fds[i].fd);
                 }
-
-                if (fds[i].revents & POLLOUT )
-                {
-                    std::cout << fds[i].fd <<" ready to start writing to\n";
-                    writeClientResponse(fds[i].fd);
-                    fds[i].events &= ~POLLOUT;
+            }
+            
+            // Process clients in round-robin order
+            size_t clientCount = fds.size() - numberOfServers;
+            if (clientCount == 0) continue;
+            
+            // Start processing from the next client
+            size_t startIdx = (lastProcessedClient >= numberOfServers) 
+                              ? lastProcessedClient + 1 
+                              : numberOfServers;
+            
+            for (size_t i = 0; i < clientCount; i++) {
+                size_t currentIdx = (startIdx + i) % clientCount + numberOfServers;
+                if (currentIdx >= fds.size()) continue;
+                
+                pollfd& currentFd = fds[currentIdx];
+                if (currentFd.revents & POLLIN) {
+                    // Process only one chunk per iteration
+                    int keepAlive = readClientRequest(currentFd.fd);
+                    updateClientActivity(currentFd.fd);
+                    
+                    std::map<int, SocketTracker>::iterator it = fdsTracker.find(currentFd.fd);
+                    if (it != fdsTracker.end() && !it->second.response.empty()) {
+                        currentFd.events |= POLLOUT;
+                    }
+                    
+                    if (keepAlive == 0) {
+                        removeClient(currentIdx);
+                        clientCount--; // Adjust count after removal
+                        i--; // Adjust loop index
+                    }
                 }
-                // if (keepAlive == 0 )
-                // removeClient(i);
-                // ready--;
-                // if (ready == 0)
-                //     break;
+                
+                // Update last processed index
+                lastProcessedClient = currentIdx;
             }
         }
     }
-    
-
-
 
     monitorClient::~monitorClient()
     {
