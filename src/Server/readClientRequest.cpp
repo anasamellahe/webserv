@@ -152,8 +152,8 @@ int monitorClient::readClientRequest(int clientFd) {
         // Try parsing (even if incomplete)
         bool validity = req.parseFromSocket(clientFd, tracker.request.c_str(), tracker.request.size());
         
-        // Handle parsing outcomes
-        if (!req.isValid()) {
+        // Use validity or suppress warning
+        if (!validity || !req.isValid()) {
             if (!req.getErrorCode().empty()) {
                 // Fatal error - close connection
                 tracker.error = req.getErrorCode();

@@ -9,11 +9,19 @@
 
 // Simple HTTP request for testing
 const char* TEST_HTTP_REQUEST = 
-    "GET /index.html HTTP/1.1\r\n"
+    "GET /test/path/index.html HTTP/1.1\r\n"
     "Host: localhost:8080\r\n"
-    "User-Agent: TestClient/1.0\r\n"
-    "Accept: */*\r\n"
-    "Connection: keep-alive\r\n\r\n";
+    "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n"
+    "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n"
+    "Accept-Language: en-US,en;q=0.5\r\n"
+    "Accept-Encoding: gzip, deflate, br\r\n"
+    "Connection: keep-alive\r\n"
+    "Referer: http://localhost:8080/\r\n"
+    "Cookie: sessionID=abc123; userToken=xyz789\r\n"
+    "Cache-Control: max-age=0\r\n"
+    "Content-Type: application/x-www-form-urlencoded\r\n"
+    "Content-Length: 0 \r\n"
+    "\r\n";
 
 // Test request parsing
 void test_request_parsing() {
@@ -22,7 +30,7 @@ void test_request_parsing() {
     Request req; // Create request object with dummy client FD
     std::string req_str = TEST_HTTP_REQUEST;
 
-    bool result = req.parseFromSocket(1, req_str, req_str.length());
+    bool result = req.parseFromSocket(0, req_str.c_str(), req_str.size());
     std::cout << "Parse result: " << (result ? "SUCCESS" : "FAILED") << std::endl;
     if (result) {
         std::cout << "Method: " << req.getMethod() << std::endl;
