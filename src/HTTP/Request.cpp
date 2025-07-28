@@ -15,7 +15,6 @@
 Request::Request() 
 {
     this->clientFD = -1;
-    this->serverConfig = nullptr; // Initialize pointer to null
     this->is_valid = false;
     this->is_chunked = false;
     this->Port = 0;
@@ -27,7 +26,6 @@ Request::Request()
 Request::Request(int clientFD) 
 {
     this->clientFD = clientFD;
-    this->serverConfig = nullptr; // Initialize pointer to null
     this->is_valid = false;
     this->is_chunked = false;
     this->Port = 0;
@@ -54,7 +52,7 @@ bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t si
         }
         
         // Extract header section
-        std::string headers_section = this->requestContent.substr(0, header_end);
+        std::string headers_section = this->requestContent.substr(0, header_end + 2);
         
         // Split headers into lines
         std::vector<std::string> header_lines;
@@ -170,7 +168,8 @@ void Request::parseStartLine(const std::string& line)
 
 bool Request::parseHeaders(const std::string& headers_text)
 {
-  std::string key, value;
+    std::cout << headers_text<< std::endl;
+    std::string key, value;
     size_t pos = headers_text.find(":", 0);
     if (pos == std::string::npos)
     {
@@ -201,23 +200,7 @@ bool Request::parseHeaders(const std::string& headers_text)
     return true;
 }
 
-bool Request::parseSingleLineHeader(const std::string line)
-{
-    // Suppress unused parameter warning
-    (void)line;
-    
-    // TODO: Implement actual header line parsing
-    return true;
-}
 
-bool Request::parseRequestLine(const std::string& line)
-{
-    // Suppress unused parameter warning
-    (void)line;
-    
-    // TODO: Implement actual request line parsing
-    return false;
-}
 
 const std::string& Request::getMethod() const
 {
@@ -299,20 +282,44 @@ void Request::addQueryParam(const std::string& key, const std::string& value)
 
 void Request::parseQueryPair(const std::string &query, size_t start, size_t end) 
 {
-    // Suppress unused parameter warnings
-    (void)query;
-    (void)start;
-    (void)end;
-    
-    // TODO: Implement actual query parameter parsing
+
+    size_t pos = query.find("=", start);
+    if (pos != std::string::npos || pos <= end)
+    {
+        std::string key = query.substr(start, pos - start);
+        std::string value = query.substr(pos + 1, end - pos);
+        addQueryParam(key, value);
+    }
 }
 
 bool Request::parseQueryString()
 {
-    // Simplified implementation
-    return false;
-}
 
+    size_t pos = path.find("?", 0);
+
+    if (pos == std::string::npos)
+        return false;
+    std::string queryParams;
+    queryParams = path.substr(pos + 1, std::string::npos);
+    path.erase(pos);
+    size_t start    = 0;
+    size_t end      = 0;
+    while (start < queryParams.size())
+    {
+        end = queryParams.find("&", start);
+        if (end != std::string::npos)
+        {
+            parseQueryPair(queryParams, start, end - 1);
+            start = end + 1;
+        }
+        else
+        {
+            parseQueryPair(queryParams, start, queryParams.size() - 1);
+            break;
+        }
+    }
+    return true;
+}
 const std::map<std::string, std::string>& Request::getQueryParams() const
 {
     return this->query_params;
@@ -393,16 +400,6 @@ double Request::getContentLength()
 }
 
 // Implementation for getserverConfig method
-Config* Request::getserverConfig(std::string serverToFind, const Config* serversConfigs)
-{
-    // Suppress unused parameter warnings
-    (void)serverToFind;
-    (void)serversConfigs;
-    
-    // TODO: Implement this method based on your application logic
-    // This is a placeholder implementation
-    return nullptr;
-}
 
 bool Request::isValid()
 {
