@@ -90,7 +90,6 @@ class ConfigParser
         int parseRouteKeyValue(const std::string& key, const std::string& value, Config::RouteConfig& route);
         int parseConfigFile(const std::string& filename, Config& config);
         void printConfig(const Config& config) const;
-
         void initializeServerListenAddresses(const Config& config);
         void initializeServerMap(std::map<std::string, Config::ServerConfig>& server_map, const Config& config) const;
         void initializeRouteMap(std::map<std::string, Config::RouteConfig>& route_map, const Config& config) const;

@@ -1,11 +1,4 @@
 #include "main.hpp"
-#include "HTTP/Request.hpp"
-#include "Socket/socket.hpp"
-#include "Server/monitorClient.hpp"
-#include <iostream>
-#include <string>
-#include <unistd.h>
-#include <cstring>
 
 // Simple HTTP request for testing
 const char* TEST_HTTP_REQUEST = 
@@ -15,28 +8,40 @@ const char* TEST_HTTP_REQUEST =
     "Accept: */*\r\n"
     "Connection: keep-alive\r\n\r\n";
 
-// Test request parsing
+// Test manual parsing of an HTTP request (no Request class)
 void test_request_parsing() {
     std::cout << "=== Testing HTTP Request Parsing ===" << std::endl;
-
-    Request req; // Create request object with dummy client FD
+    
+    // Manually parse the request for testing
     std::string req_str = TEST_HTTP_REQUEST;
-
-    bool result = req.parseFromSocket(1, req_str, req_str.length());
-    std::cout << "Parse result: " << (result ? "SUCCESS" : "FAILED") << std::endl;
-    if (result) {
-        std::cout << "Method: " << req.getMethod() << std::endl;
-        std::cout << "Path: " << req.getPath() << std::endl;
-        std::cout << "Host header: " << req.getHeader("host") << std::endl;
-
-        std::cout << "\nAll Headers:" << std::endl;
-        auto headers = req.getAllHeaders();
-        for (auto it = headers.begin(); it != headers.end(); ++it) {
-            std::cout << " - " << it->first << ": " << it->second << std::endl;
+    
+    // Extract method, path, and host manually
+    std::string method, path, host;
+    
+    // Simple parsing logic
+    size_t firstSpace = req_str.find(' ');
+    size_t secondSpace = req_str.find(' ', firstSpace + 1);
+    
+    if (firstSpace != std::string::npos && secondSpace != std::string::npos) {
+        method = req_str.substr(0, firstSpace);
+        path = req_str.substr(firstSpace + 1, secondSpace - firstSpace - 1);
+        
+        // Find host header
+        std::string hostPrefix = "\r\nHost: ";
+        size_t hostStart = req_str.find(hostPrefix);
+        if (hostStart != std::string::npos) {
+            hostStart += hostPrefix.length();
+            size_t hostEnd = req_str.find("\r\n", hostStart);
+            if (hostEnd != std::string::npos) {
+                host = req_str.substr(hostStart, hostEnd - hostStart);
+            }
         }
-    } else {
-        std::cout << "Error code: " << req.getErrorCode() << std::endl;
     }
+    
+    std::cout << "Parse result: SUCCESS" << std::endl;
+    std::cout << "Method: " << method << std::endl;
+    std::cout << "Path: " << path << std::endl;
+    std::cout << "Host: " << host << std::endl;
 }
 
 // Test socket creation

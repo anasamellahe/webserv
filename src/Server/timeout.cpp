@@ -8,7 +8,9 @@
 #include <fcntl.h>  
 
 #define CHUNK_SIZE 8192 // Define the chunk size for reading data
-monitorClient::SocketTracker::SocketTracker() : WError(0), RError(0), lastActive(time(NULL)) {
+monitorClient::SocketTracker::SocketTracker() 
+    : WError(0), RError(0), lastActive(time(NULL)), 
+      headers_parsed(false), is_chunked(false), expected_length(0) {
 }
 bool monitorClient::shouldCheckTimeouts(time_t currentTime) {
     // Determine if enough time has passed to check for timeouts
@@ -40,7 +42,7 @@ void monitorClient::checkTimeouts() {
             it->second.WError = 1;
             
             std::string timeoutHtml = "<html><body><h1>408 Request Timeout</h1>"
-                                     "<p>The server timed out waiting for the request.</p></body></html>";
+                                     "<p>The server timed out waiting for the Request.</p></body></html>";
             
             it->second.response = "HTTP/1.1 408 Request Timeout\r\n";
             it->second.response += "Connection: close\r\n";

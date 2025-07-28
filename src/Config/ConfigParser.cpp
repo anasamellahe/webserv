@@ -2,10 +2,6 @@
 #include <fstream>
 #include <sstream>
 
-#include "ConfigParser.hpp"
-#include <fstream>
-#include <sstream>
-
 int ConfigParser::parseServerKeyValue(const std::string& key, const std::string& value, Config::ServerConfig& server)
 {
     // Check for quotes and reject them
@@ -59,7 +55,7 @@ int ConfigParser::parseServerKeyValue(const std::string& key, const std::string&
         server.error_pages[errorCode] = value;
     }
     else if (key == "client_max_body_size") {
-        if (server.client_max_body_size != 0) {
+        if (server.client_max_body_size != 1048576) {
             std::cerr << "Error: Duplicate key 'client_max_body_size' detected" << std::endl;
             return -1;
         }
@@ -79,7 +75,6 @@ int ConfigParser::parseServerKeyValue(const std::string& key, const std::string&
             std::cerr << "Error: Client max body size exceeds maximum limit: " << value << std::endl;
             return -1;
         }
-        server.chunked_transfer = false;
     }
     else if (key == "default_server") {
         if (server.default_server != false) {
@@ -247,8 +242,7 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
                 // Initialize server defaults
                 currentServer->host = "0.0.0.0";  // Default to all interfaces
                 currentServer->default_server = false;
-                currentServer->client_max_body_size = 0; // No default size - use chunked transfer
-                currentServer->chunked_transfer = true;  // Default to chunked transfer
+                currentServer->client_max_body_size = 1048576; // 1MB default
                 currentServer->root = "/var/www/html"; // Default root
                 isServerSection = true;
                 isRouteSection = false;
@@ -412,13 +406,6 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
             config.servers[i].ports.push_back(8080);
         }
         // Host is already initialized to 0.0.0.0 by default
-        
-        // If client_max_body_size is not set (0), enable chunked transfer
-        if (config.servers[i].client_max_body_size == 0) {
-            config.servers[i].chunked_transfer = true;
-        } else {
-            config.servers[i].chunked_transfer = false;
-        }
     }
     
     // Check for duplicate server names across servers
@@ -495,11 +482,7 @@ void ConfigParser::printConfig(const Config& config) const
         for (const auto& errorPage : server.error_pages) {
             std::cout << "    " << errorPage.first << ": " << errorPage.second << std::endl;
         }
-        if (server.client_max_body_size > 0) {
-            std::cout << "  Client Max Body Size: " << server.client_max_body_size << std::endl;
-        } else {
-            std::cout << "  Chunked Transfer: enabled" << std::endl;
-        }
+        std::cout << "  Client Max Body Size: " << server.client_max_body_size << std::endl;
         std::cout << "  Default Server: " << (server.default_server ? "true" : "false") << std::endl;
 
         std::cout << "  Routes:" << std::endl;
@@ -536,10 +519,8 @@ void ConfigParser::printConfig(const Config& config) const
             if (route.upload_enabled) {
                 std::cout << "    Upload Path: " << route.upload_path << std::endl;
             }
-            if (server.client_max_body_size > 0) {
+            if (server.client_max_body_size != 0) {
                 std::cout << "    Route Max Body Size: " << server.client_max_body_size << std::endl;
-            } else {
-                std::cout << "    Route Transfer: chunked" << std::endl;
             }
         }
         

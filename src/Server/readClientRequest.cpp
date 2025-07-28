@@ -6,7 +6,6 @@
 #include <sstream>
 #include <iostream>
 #include <fcntl.h>
-#include "Config/ConfigParser.hpp"
 #define MAX_HEADER_SIZE 8192 // Define the maximum header size
 
 int monitorClient::readChunkFromClient(int clientFd, std::string& buffer) {
@@ -74,7 +73,7 @@ int monitorClient::readClientRequest(int clientFd) {
 
     SocketTracker& tracker = it->second;
     
-    request req(clientFd);
+    Request req(clientFd);
     
     // Read chunk (up to 8KB)
     std::string buffer;
@@ -112,7 +111,7 @@ int monitorClient::readClientRequest(int clientFd) {
     }
 
     std::string headers_section = tracker.request.substr(0, header_end);
-    if (req.parseHeaders(headers_section)) { // Returns true on error
+    if (!req.parseHeaders(headers_section)) {
         return 0;
     }
     if (!tracker.headers.empty()) {
@@ -151,7 +150,7 @@ int monitorClient::readClientRequest(int clientFd) {
         prev_size = tracker.request.size();
         
         // Try parsing (even if incomplete)
-        bool validity = req.parseFromSocket(clientFd, tracker.request, tracker.request.size());
+        bool validity = req.parseFromSocket(clientFd, tracker.request.c_str(), tracker.request.size());
         
         // Handle parsing outcomes
         if (!req.isValid()) {

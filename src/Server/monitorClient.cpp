@@ -40,7 +40,7 @@
         serverPollFd.events = POLLIN;
         fds.push_back(serverPollFd);
 
-        // create a client tracker to track the request and response delivery 
+        // create a client tracker to track the Request and response delivery 
         SocketTracker st;
         this->fdsTracker.insert(std::pair<int, SocketTracker>(clientFd, st));
         std::cout << serverFD << " accept new connection " << clientFd << "\n";

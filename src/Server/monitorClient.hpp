@@ -1,14 +1,15 @@
 #pragma once
 #include "../main.hpp"
+#include "../HTTP/Common.hpp"
 #include "../HTTP/Request.hpp"
 
 #pragma once
 #include "../main.hpp"
+#include "../HTTP/Common.hpp"
 #include "../HTTP/Request.hpp"
 #include <time.h>
 
 class sock;
-struct FilePart;
 class monitorClient
 {
     public:
@@ -30,6 +31,11 @@ class monitorClient
             std::vector<std::string> chunks;                  // Stores chunks if the request is chunked
             std::map<std::string, FilePart> uploads;          // Stores uploaded files
             std::string error;    // Error message if any
+            
+            // Additional fields for request parsing
+            bool headers_parsed;                              // Whether headers have been parsed
+            bool is_chunked;                                  // Whether the request uses chunked encoding
+            size_t expected_length;                           // Expected content length
             
             // Constructor to initialize the tracker with current time
             SocketTracker() ;

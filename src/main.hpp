@@ -21,7 +21,13 @@
 #include "Config/ConfigParser.hpp"
 #include "Server/monitorClient.hpp"
 
-
+#include "HTTP/Request.hpp"
+#include "Socket/socket.hpp"
+#include "Server/monitorClient.hpp"
+#include <iostream>
+#include <string>
+#include <unistd.h>
+#include <cstring>
 
 
 
