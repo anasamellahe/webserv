@@ -111,6 +111,7 @@ class Request
         void addUpload(const std::string& key, const FilePart& file_part);
         bool isChunked() const;
         bool isValid();
+        void reset();
 
         Config getserverConfig(std::string serverToFind, const Config& serversConfigs); //   host or serverName
 

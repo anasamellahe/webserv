@@ -61,6 +61,44 @@ class monitorClient
         //map to track each socket status 
         std::map<int, SocketTracker> fdsTracker;
         
+        // Debug method to print request information after parsing
+        void printRequestInfo(int clientFd) {
+            Miterator it = fdsTracker.find(clientFd);
+            if (it != fdsTracker.end()) {
+                SocketTracker& tracker = it->second;
+                std::cout << "\n===== REQUEST INFO FOR CLIENT " << clientFd << " =====\n";
+                std::cout << "Method: " << tracker.method << "\n";
+                std::cout << "Path: " << tracker.path << "\n";
+                std::cout << "Headers parsed: " << (tracker.headers_parsed ? "Yes" : "No") << "\n";
+                std::cout << "Is chunked: " << (tracker.is_chunked ? "Yes" : "No") << "\n";
+                std::cout << "Expected length: " << tracker.expected_length << "\n";
+                std::cout << "Error: " << (tracker.error.empty() ? "None" : tracker.error) << "\n";
+                
+                std::cout << "Headers (" << tracker.headers.size() << "):\n";
+                for (std::map<std::string, std::string>::const_iterator h = tracker.headers.begin(); 
+                     h != tracker.headers.end(); ++h) {
+                    std::cout << "  " << h->first << ": " << h->second << "\n";
+                }
+                
+                std::cout << "Query Params (" << tracker.queryParams.size() << "):\n";
+                for (std::map<std::string, std::string>::const_iterator q = tracker.queryParams.begin(); 
+                     q != tracker.queryParams.end(); ++q) {
+                    std::cout << "  " << q->first << "=" << q->second << "\n";
+                }
+                
+                std::cout << "Cookies (" << tracker.cookies.size() << "):\n";
+                for (std::map<std::string, std::string>::const_iterator c = tracker.cookies.begin(); 
+                     c != tracker.cookies.end(); ++c) {
+                    std::cout << "  " << c->first << "=" << c->second << "\n";
+                }
+                
+                std::cout << "Finished Requests: " << tracker.finishedRequests.size() << "\n";
+                std::cout << "Request Buffer Length: " << tracker.request.size() << " bytes\n";
+                std::cout << "Response Buffer Length: " << tracker.response.size() << " bytes\n";
+                std::cout << "============================================\n\n";
+            }
+        }
+        
         // Timeout constants
         static const time_t CLIENT_TIMEOUT = 60;         // Client timeout in seconds (1 minute)
         static const time_t TIMEOUT_CHECK_INTERVAL = 10; // Check for timeouts every 10 seconds

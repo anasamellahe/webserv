@@ -157,16 +157,13 @@ int monitorClient::readClientRequest(int clientFd) {
     }
 
     bool processed_data = false;
-    size_t prev_size;
     
     // Process complete requests in buffer
-    do {
-        prev_size = tracker.request.size();
-        
-        // Try parsing (even if incomplete)
-        bool validity = req.parseFromSocket(clientFd, tracker.request.c_str(), tracker.request.size());
-        
-        // Use validity or suppress warning
+    while (!tracker.request.empty()) {
+        Request req(clientFd); // New object for each parse
+
+        bool validity = req.parseFromSocket(clientFd, tracker.request, tracker.request.size());
+
         if (!validity || !req.isValid()) {
             if (!req.getErrorCode().empty()) {
                 // Fatal error - close connection
@@ -178,28 +175,31 @@ int monitorClient::readClientRequest(int clientFd) {
         }
 
         // Complete request processing
-        if (req.isComplete()) {
-            processed_data = true;
-            
-            // Update tracker with request data
-            tracker.method = req.getMethod();
-            tracker.path = req.getPath();
-            tracker.headers = req.getAllHeaders();
-            tracker.queryParams = req.getQueryParams();
-            tracker.cookies = req.getCookies();
-            
-            // Remove processed data from buffer
-            size_t processed_size = prev_size - tracker.request.size();
-            if (processed_size > 0) {
-                tracker.request.erase(0, processed_size);
-            }
+        tracker.method = req.getMethod();
+        tracker.path = req.getPath();
+        tracker.headers = req.getAllHeaders();
+        tracker.queryParams = req.getQueryParams();
+        tracker.cookies = req.getCookies();
+
+        // Remove processed data from buffer
+        size_t parsed_size = req.requestContent.size();
+        if (parsed_size == 0 || parsed_size > tracker.request.size()) {
+            // Defensive: avoid invalid erase or infinite loop
+            break;
         }
-    } while (!tracker.request.empty() && prev_size != tracker.request.size());
+        tracker.request.erase(0, parsed_size);
+
+        // Mark that we processed data
+        processed_data = true;
+        
+        // Print debug information about the request
+        printRequestInfo(clientFd);
+    }
 
     if (processed_data) {
         tracker.updateActivity();
     }
-        tracker.updateActivity();
-             return 1; // Continue reading
-    }
+    
+    return 1; // Continue reading
+}
 

@@ -56,6 +56,28 @@ Request::~Request()
     // Destructor logic if needed
 }
 
+void Request::reset() {
+    this->method.clear();
+    this->path.clear();
+    this->version.clear();
+    this->headers.clear();
+    this->body.clear();
+    this->error_code.clear();
+    this->Host.clear();
+    this->is_Complete = false;
+    this->Port = 0;
+    this->isIp = false;
+    this->query_params.clear();
+    this->uploads.clear();
+    this->cgi_extension.clear();
+    this->cgi_env.clear();
+    this->cookies.clear();
+    this->is_chunked = false;
+    this->chunks.clear();
+    this->is_valid = false;
+    // Do not clear clientFD or client_addr, as they are connection-specific
+}
+
 bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t size)
 {
     DEBUG_START();
@@ -246,13 +268,11 @@ void Request::parseStartLine(const std::string& line)
     size_t pos = std::string::npos;
 
     const char* methods[] = {"GET", "POST", "DELETE", NULL}; // Changed to const char*
-    bool methodFound = false;
     
     for (size_t i = 0; methods[i]; i++) {
         DEBUG("Checking for method: " << methods[i]);
         if ((pos = line.find(methods[i], 0)) != std::string::npos) {
             DEBUG("Method found: " << methods[i] << " at position " << pos);
-            methodFound = true;
             break;
         }
     }

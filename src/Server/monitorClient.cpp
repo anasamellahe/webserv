@@ -139,11 +139,3 @@
 
     monitorClient::monitorexception::~monitorexception() throw()
     {}
-
-    // SocketTracker* monitorClient::getSocketTracker(int socketFd)
-    // {
-    //     CMiterator it = this->fdsTracker.find(socketFd);
-    //     if (it != this->fdsTracker.end())
-    //         return &it->second;
-    //     return NULL;
-    // }
