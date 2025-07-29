@@ -79,7 +79,24 @@ int monitorClient::readClientRequest(int clientFd) {
     std::string buffer;
     int readResult = readChunkFromClient(clientFd, buffer);
     
-    // Handle read status
+    // Handle read status    
+    try {
+        // Your existing code that parses the request
+        req.parseFromSocket(clientFd, buffer, readResult);
+        // ...
+    } catch (int e) {
+        // Handle the integer exception
+        std::cerr << "Error code: " << e << " while parsing request" << std::endl;
+        req.setErrorCode("400 Bad Request");
+    } catch (const std::exception& e) {
+        // Handle standard exceptions
+        std::cerr << "Exception: " << e.what() << std::endl;
+        req.setErrorCode("500 Internal Server Error");
+    } catch (...) {
+        // Handle any other exceptions
+        std::cerr << "Unknown exception while parsing request" << std::endl;
+        req.setErrorCode("500 Internal Server Error");
+    }
     if (readResult <= 0) {
         if (readResult == 0) {  // Client closed connection
             req.setErrorCode("400 Bad Request");
@@ -110,10 +127,7 @@ int monitorClient::readClientRequest(int clientFd) {
         return 1;
     }
 
-    std::string headers_section = tracker.request.substr(0, header_end);
-    if (!req.parseHeaders(headers_section)) {
-        return 0;
-    }
+
     if (!tracker.headers.empty()) {
         if (req.isChunked()) {
             // Check if chunked transfer is complete

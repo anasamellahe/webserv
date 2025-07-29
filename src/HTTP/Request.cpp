@@ -10,37 +10,58 @@
 #include <stdexcept>
 #include <algorithm>
 #include <cstddef>
+#include <iostream>
+
+// Debug helpers
+#define DEBUG_MODE 1
+#define DEBUG(msg) if (DEBUG_MODE) { std::cout << "\033[33m[DEBUG Request]\033[0m " << msg << std::endl; }
+#define DEBUG_ERROR(msg) if (DEBUG_MODE) { std::cout << "\033[31m[ERROR Request]\033[0m " << msg << std::endl; }
+#define DEBUG_FUNC() if (DEBUG_MODE) { std::cout << "\033[36m[FUNC Request]\033[0m " << __func__ << " called" << std::endl; }
+#define DEBUG_VAR(var) if (DEBUG_MODE) { std::cout << "\033[32m[VAR Request]\033[0m " << #var << " = " << var << std::endl; }
+#define DEBUG_START() if (DEBUG_MODE) { std::cout << "\033[34m[START Request]\033[0m " << __func__ << " ----------------------" << std::endl; }
+#define DEBUG_END() if (DEBUG_MODE) { std::cout << "\033[34m[END Request]\033[0m " << __func__ << " ----------------------" << std::endl; }
 
 // Default constructor
 Request::Request() 
 {
+    DEBUG_FUNC();
     this->clientFD = -1;
     this->is_valid = false;
     this->is_chunked = false;
     this->Port = 0;
     this->isIp = false;
     this->error_code.clear();
+    DEBUG("Default constructor initialized");
 }
 
 // Constructor with client FD
 Request::Request(int clientFD) 
 {
+    DEBUG_FUNC();
+    DEBUG_VAR(clientFD);
     this->clientFD = clientFD;
     this->is_valid = false;
     this->is_chunked = false;
     this->Port = 0;
     this->isIp = false;
     this->error_code.clear();
+    DEBUG("Constructor with clientFD initialized");
 }
 
 // Destructor
 Request::~Request() 
 {
+    DEBUG_FUNC();
+    DEBUG_VAR(clientFD);
     // Destructor logic if needed
 }
 
 bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t size)
 {
+    DEBUG_START();
+    DEBUG_VAR(clientFD);
+    DEBUG_VAR(size);
+    
     this->clientFD = clientFD;
     this->requestContent = buffer.substr(0, size);
     
@@ -48,11 +69,15 @@ bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t si
         // Find the end of headers (double CRLF)
         size_t header_end = this->requestContent.find("\r\n\r\n");
         if (header_end == std::string::npos) {
+            DEBUG("Incomplete request, no double CRLF found");
             return false; // Incomplete request, need more data
         }
         
+        DEBUG_VAR(header_end);
+        
         // Extract header section
-        std::string headers_section = this->requestContent.substr(0, header_end + 2);
+        std::string headers_section = this->requestContent.substr(0, header_end);
+        DEBUG("Headers section extracted, length: " << headers_section.length());
         
         // Split headers into lines
         std::vector<std::string> header_lines;
@@ -64,138 +89,257 @@ bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t si
         }
         
         if (header_lines.empty()) {
+            DEBUG_ERROR("No header lines found");
             this->error_code = BAD_REQ;
             return false;
         }
         
+        DEBUG("Number of header lines: " << header_lines.size());
+        DEBUG("First line: " << header_lines[0]);
+        
         // Parse the request line (first line)
-        parseStartLine(header_lines[0]);
+        try {
+            DEBUG("Parsing start line: " << header_lines[0]);
+            parseStartLine(header_lines[0]);
+            DEBUG("Start line parsed successfully");
+        } catch (int e) {
+            DEBUG_ERROR("Error parsing start line: " << e);
+            this->is_valid = false;
+            return false;
+        }
         
         // Parse the rest of the headers
+        DEBUG("Parsing header lines");
         for (size_t i = 1; i < header_lines.size(); i++) {
-            parseHeaders(header_lines[i]);
+            try {
+                DEBUG("*****Parsing header line " << i << ": " << header_lines[i]);
+                parseHeaders(header_lines[i]);
+            } catch (int e) {
+                
+                DEBUG_ERROR("Error parsing header line " << i << ": " << e);
+                this->is_valid = false;
+                return false;
+            }
         }
         
         // Parse query string if present in the path
         size_t query_pos = this->path.find('?');
         if (query_pos != std::string::npos) {
+            DEBUG("Query string found in path at position " << query_pos);
             std::string query_string = this->path.substr(query_pos + 1);
             this->path = this->path.substr(0, query_pos);
+            DEBUG("Path after removing query: " << this->path);
+            DEBUG("Query string: " << query_string);
             parseQueryString();
         }
         
         // Parse body if present
         if (header_end + 4 < this->requestContent.length()) {
+            DEBUG("Body present, starting at position " << (header_end + 4));
             std::string body_data = this->requestContent.substr(header_end + 4);
+            DEBUG("Body length: " << body_data.length());
             
             // Check for chunked encoding
             ConstHeaderIterator transfer_encoding = this->headers.find("transfer-encoding");
             if (transfer_encoding != this->headers.cend() && 
                 transfer_encoding->second.find("chunked") != std::string::npos) {
+                DEBUG("Chunked transfer encoding detected");
                 parseChunkedTransfer(body_data);
             } else {
+                DEBUG("Normal body parsing");
                 parseBody(body_data);
             }
+        } else {
+            DEBUG("No body in request");
         }
         
         // Extract cookies if present
+        DEBUG("Parsing cookies");
         parseCookies();
         
         // Check for CGI requests
+        DEBUG("Extracting CGI info");
         extractCgiInfo();
         
         // Validate the request
+        DEBUG("Validating request");
         validateRequest();
         
+        DEBUG("Request parsing complete, is_valid: " << (this->is_valid ? "true" : "false"));
+        DEBUG_END();
         return this->is_valid;
     }
     catch (int error_code) {
+        DEBUG_ERROR("Exception caught in parseFromSocket: " << error_code);
         this->is_valid = false;
+        DEBUG_END();
+        return false;
+    }
+    catch (const std::exception& e) {
+        DEBUG_ERROR("Standard exception caught in parseFromSocket: " << e.what());
+        this->is_valid = false;
+        DEBUG_END();
+        return false;
+    }
+    catch (...) {
+        DEBUG_ERROR("Unknown exception caught in parseFromSocket");
+        this->is_valid = false;
+        DEBUG_END();
         return false;
     }
 }
 
 void Request::setMethod(const std::string& method)
 {
-    if (this->method.empty() && !method.empty())
+    DEBUG_FUNC();
+    DEBUG_VAR(method);
+    
+    if (this->method.empty() && !method.empty()) {
         this->method = method;
-    else if (error_code.empty())
+        DEBUG("Method set successfully");
+    }
+    else if (error_code.empty()) {
         this->error_code = BAD_REQ;
+        DEBUG_ERROR("Method already set or empty method provided, setting error code: " << BAD_REQ);
+    }
 }
 
 void Request::setPath(const std::string& path)
 {
-    if (path.size() > MAX_PATH_SIZE && error_code.empty())
+    DEBUG_FUNC();
+    DEBUG_VAR(path);
+    
+    if (path.size() > MAX_PATH_SIZE && error_code.empty()) {
         this->error_code = URI_T_LONG;
-    else if (this->path.empty() && !path.empty())
+        DEBUG_ERROR("Path too long, setting error code: " << URI_T_LONG);
+    }
+    else if (this->path.empty() && !path.empty()) {
         this->path = path;
-    else if (error_code.empty())
+        DEBUG("Path set successfully");
+    }
+    else if (error_code.empty()) {
         this->error_code = BAD_REQ;
+        DEBUG_ERROR("Path already set or empty path provided, setting error code: " << BAD_REQ);
+    }
 }
 
 void Request::setVersion(const std::string& version)
 {
-    if (this->version.empty() && !version.empty() && version.compare("HTTP/1.1") == 0)
+    DEBUG_FUNC();
+    DEBUG_VAR(version);
+    
+    if (this->version.empty() && !version.empty() && version.compare("HTTP/1.1") == 0) {
         this->version = version;
-    else if (this->error_code.empty())
+        DEBUG("Version set successfully");
+    }
+    else if (this->error_code.empty()) {
         this->error_code = VERSION_ERR;
+        DEBUG_ERROR("Version not HTTP/1.1 or already set, setting error code: " << VERSION_ERR);
+    }
 }
 
 void Request::parseStartLine(const std::string& line)
 {
+    DEBUG_START();
+    DEBUG_VAR(line);
+    
     size_t pos = std::string::npos;
 
     const char* methods[] = {"GET", "POST", "DELETE", NULL}; // Changed to const char*
-    for (size_t i = 0; methods[i]; i++)
-    {
-        if ((pos = line.find(methods[i], 0)) != std::string::npos)
+    bool methodFound = false;
+    
+    for (size_t i = 0; methods[i]; i++) {
+        DEBUG("Checking for method: " << methods[i]);
+        if ((pos = line.find(methods[i], 0)) != std::string::npos) {
+            DEBUG("Method found: " << methods[i] << " at position " << pos);
+            methodFound = true;
             break;
+        }
     }
-    if (pos == std::string::npos)
+    
+    if (pos == std::string::npos) {
+        DEBUG_ERROR("No valid HTTP method found in the request line");
         throw -1;
+    }
+    
+    try {
+        std::string str;
+        std::stringstream ss(line);
         
-    std::string str;
-    std::stringstream ss(line);
-    ss >> str;
-    setMethod(str);
-    ss >> str;
-    setPath(str);
-    ss >> str;
-    setVersion(str);
-    if (!this->error_code.empty())
+        // Extract method
+        ss >> str;
+        DEBUG("Extracted method: " << str);
+        setMethod(str);
+        
+        // Extract path
+        ss >> str;
+        DEBUG("Extracted path: " << str);
+        setPath(str);
+        
+        // Extract version
+        ss >> str;
+        DEBUG("Extracted version: " << str);
+        setVersion(str);
+        
+        if (!this->error_code.empty()) {
+            DEBUG_ERROR("Error code set during parsing: " << this->error_code);
+            throw 1;
+        }
+        
+        DEBUG("Start line parsed successfully");
+        DEBUG_END();
+    }
+    catch (const std::exception& e) {
+        DEBUG_ERROR("Exception in parseStartLine: " << e.what());
         throw 1;
+    }
 }
 
 bool Request::parseHeaders(const std::string& headers_text)
 {
-    std::cout << headers_text<< std::endl;
+    DEBUG_START();
+    // DEBUG_VAR(headers_text);
+     std::cout << "====================================================== start\n" ;
+    std::cout << headers_text <<std::endl ;
+    std::cout << "======================================================end\n" ;
     std::string key, value;
     size_t pos = headers_text.find(":", 0);
-    if (pos == std::string::npos)
-    {
+    
+    if (pos == std::string::npos) {
         this->error_code = BAD_REQ;
         throw 1;
     }
+    
+    
     key = headers_text.substr(0, pos);
+    
     stringToLower(key);
+    
     size_t valueStartIndex = headers_text.find_first_not_of(": \r\t\v\f", pos);
-    if (valueStartIndex == std::string::npos)
+    if (valueStartIndex == std::string::npos) {
         valueStartIndex = pos;
+    }
+    
     value = headers_text.substr(valueStartIndex, headers_text.rfind("\r\n") - valueStartIndex);
+    
+    
     stringToLower(value);
-    if (keyValidationNot(key) || valueValidationNot(value))
-    {
+    
+    // Validate key and value
+    if (keyValidationNot(key) || valueValidationNot(value)) {
+
         if (this->error_code.empty())
             this->error_code = BAD_REQ;
+
         throw 1;
     }
 
-    if (key == "host" && value.empty())
-    {
+    if (key == "host" && value.empty()) {
         if (this->error_code.empty())
             this->error_code = BAD_REQ;
         throw 1;
     }
+    
     this->headers.insert(std::pair<std::string, std::string>(key, value));
     return true;
 }
@@ -204,39 +348,60 @@ bool Request::parseHeaders(const std::string& headers_text)
 
 const std::string& Request::getMethod() const
 {
+    DEBUG_FUNC();
+    DEBUG("Method: " << this->method);
     return this->method;
 }
 
 const std::string& Request::getPath() const
 {
+    DEBUG_FUNC();
+    DEBUG("Path: " << this->path);
     return this->path;
 }
 
 const std::string& Request::getVersion() const
 {
+    DEBUG_FUNC();
+    DEBUG("Version: " << this->version);
     return this->version;
 }
 
 const std::string& Request::getHeader(const std::string& key) const
 {
+    DEBUG_FUNC();
+    DEBUG_VAR(key);
+    
     ConstHeaderIterator it = this->headers.find(key);
-    if (it != headers.cend())
+    if (it != headers.cend()) {
+        DEBUG("Header found: " << it->second);
         return it->second;
+    }
+    
+    DEBUG("Header not found, returning key");
     return key;
 }
 
 const std::string& Request::getBody() const
 {
+    DEBUG_FUNC();
+    DEBUG("Body length: " << this->body.length());
     return this->body;
 }
 
 int Request::getClientFD() const
 {
+    DEBUG_FUNC();
+    DEBUG_VAR(this->clientFD);
     return this->clientFD;
 }
 
 sockaddr_in Request::getClientAddr() const
 {
+    DEBUG_FUNC();
+    char client_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(this->client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
+    DEBUG("Client IP: " << client_ip);
     return this->client_addr;
 }
 
