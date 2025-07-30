@@ -8,9 +8,10 @@
     // int socketAddres;
     // std::vector<pollfd> fds;
 
+
+
     monitorClient::monitorClient(std::vector<int> serverFDs)
     {
-        //fill the fds vector withe the servers socket
         pollfd serverPollFd;
         for (size_t i = 0; i < serverFDs.size(); i++)
         {
@@ -103,7 +104,6 @@
 
     void monitorClient::startEventLoop() {
         int ready = 0;
-        size_t lastProcessedClient = numberOfServers; // Track last processed client for round-robin
         initializeTimeouts();
         
         while (1) {   
@@ -120,88 +120,35 @@
                 throw monitorexception("[ERROR] poll fail: " + std::string(strerror(errno)));
             }
             
-            // Process servers for new connections first
+            // Process servers for new connections
             for (size_t i = 0; i < numberOfServers; i++) {
                 if (fds[i].revents & POLLIN) {
                     acceptNewClient(fds[i].fd);
                 }
             }
             
-            // ROUND-ROBIN CLIENT PROCESSING
-            size_t clientCount = fds.size() - numberOfServers;
-            if (clientCount > 0) {
-                // Calculate next client to process in round-robin fashion
-                size_t nextClientIndex = numberOfServers;
-                if (lastProcessedClient >= numberOfServers && lastProcessedClient < fds.size()) {
-                    nextClientIndex = lastProcessedClient + 1;
-                    if (nextClientIndex >= fds.size()) {
-                        nextClientIndex = numberOfServers; // Wrap around to first client
-                    }
-                } else {
-                    nextClientIndex = numberOfServers; // Start from first client
-                }
+            // Process clients - use reverse iteration to handle removals safely
+            for (int i = static_cast<int>(fds.size()) - 1; i >= static_cast<int>(numberOfServers); i--) {
+                if (i >= static_cast<int>(fds.size())) continue; // Safety check
                 
-                // Process clients in round-robin order
-                for (size_t processed = 0; processed < clientCount; processed++) {
-                    size_t currentIndex = nextClientIndex + processed;
-                    if (currentIndex >= fds.size()) {
-                        currentIndex = numberOfServers + (currentIndex - fds.size()); // Wrap around
+                pollfd& currentFd = fds[i];
+                if (currentFd.revents & POLLIN) {
+                    // Process only one chunk per iteration
+                    int keepAlive = readClientRequest(currentFd.fd);
+                    updateClientActivity(currentFd.fd);
+                    
+                    std::map<int, SocketTracker>::iterator it = fdsTracker.find(currentFd.fd);
+                    if (it != fdsTracker.end() && !it->second.response.empty()) {
+                        currentFd.events |= POLLOUT;
                     }
                     
-                    // Safety check for valid index
-                    if (currentIndex >= fds.size() || currentIndex < numberOfServers) {
-                        continue;
-                    }
-                    
-                    pollfd& currentFd = fds[currentIndex];
-                    
-                    // Process client if it has data ready OR for fairness in round-robin
-                    if (currentFd.revents & POLLIN) {
-                        int keepAlive = readClientRequest(currentFd.fd);
-                        updateClientActivity(currentFd.fd);
-                        
-                        std::map<int, SocketTracker>::iterator it = fdsTracker.find(currentFd.fd);
-                        if (it != fdsTracker.end() && !it->second.response.empty()) {
-                            currentFd.events |= POLLOUT;
-                        }
-                        
-                        if (keepAlive == 0) {
-                            removeClient(currentIndex);
-                            // Adjust indices after removal
-                            if (currentIndex <= lastProcessedClient) {
-                                lastProcessedClient--;
-                            }
-                            clientCount--; // Update client count
-                            break; // Exit loop after removal to avoid index issues
-                        }
-                        
-                        // Update last processed client for next round
-                        lastProcessedClient = currentIndex;
-                        break; // Process only one client per poll cycle for true round-robin
-                    }
-                    
-                    // Handle POLLOUT events for sending responses
-                    if (currentFd.revents & POLLOUT) {
-                        //writeClientResponse(currentFd.fd);
-                        currentFd.events = POLLIN; // Reset to listen for new requests
-                        
-                        // Update last processed client
-                        lastProcessedClient = currentIndex;
-                        break; // Process only one client per poll cycle
-                    }
-                }
-                
-                // If no clients were processed, advance the round-robin pointer
-                if (ready == 0 && clientCount > 0) {
-                    lastProcessedClient++;
-                    if (lastProcessedClient >= fds.size()) {
-                        lastProcessedClient = numberOfServers;
+                    if (keepAlive == 0) {
+                        removeClient(i); // Safe to remove when iterating backwards
                     }
                 }
             }
         }
     }
-
 
     monitorClient::~monitorClient()
     {
@@ -225,3 +172,83 @@
 
     monitorClient::monitorexception::~monitorexception() throw()
     {}
+
+    #include "monitorClient.hpp"
+#include "../HTTP/Request.hpp"
+#include <unistd.h>
+#include <cerrno>
+#include <cstring>
+#include <sstream>
+#include <iostream> 
+#include <fcntl.h>  
+
+#define CHUNK_SIZE 8192 // Define the chunk size for reading data
+monitorClient::SocketTracker::SocketTracker() 
+    : request_obj(new Request(-1)),  // Create new Request object with pointer
+      WError(0), 
+      RError(0), 
+      lastActive(time(NULL))
+{
+    raw_buffer = "";
+    response = "";
+    error = "";
+}
+bool monitorClient::shouldCheckTimeouts(time_t currentTime) {
+    // Determine if enough time has passed to check for timeouts
+    return (currentTime - lastTimeoutCheck >= TIMEOUT_CHECK_INTERVAL);
+}
+
+void monitorClient::SocketTracker::updateActivity() {
+    lastActive = time(NULL); // Update the last active time to the current time
+}
+
+bool monitorClient::SocketTracker::hasTimedOut(time_t currentTime, time_t timeoutSeconds) const {
+    // Check if client has exceeded the timeout threshold
+    return (currentTime - lastActive) > timeoutSeconds;
+}
+
+void monitorClient::checkTimeouts() {
+    std::cout << "Checking for timed out clients..." << std::endl;
+    time_t now = time(NULL);
+    
+    for (size_t i = numberOfServers; i < fds.size(); i++) {
+        int clientFd = fds[i].fd;
+        Miterator it = fdsTracker.find(clientFd);
+
+        if (it != fdsTracker.end() && it->second.hasTimedOut(now, CLIENT_TIMEOUT)) {
+            std::cout << "Client " << clientFd << " timed out after " 
+                      << (now - it->second.lastActive) << " seconds" << std::endl;
+            
+            it->second.RError = 408;
+            it->second.WError = 1;
+            
+            std::string timeoutHtml = "<html><body><h1>408 Request Timeout</h1>"
+                                     "<p>The server timed out waiting for the Request.</p></body></html>";
+            
+            it->second.response = "HTTP/1.1 408 Request Timeout\r\n";
+            it->second.response += "Connection: close\r\n";
+            it->second.response += "Content-Type: text/html\r\n";
+            it->second.response += "Content-Length: " + std::to_string(timeoutHtml.length()) + "\r\n\r\n";
+            it->second.response += timeoutHtml;
+            
+            fds[i].events = POLLOUT;
+        }
+    }
+    
+    lastTimeoutCheck = now;
+}
+
+void monitorClient::initializeTimeouts() {
+    // Called during monitorClient initialization
+    lastTimeoutCheck = time(NULL);
+}
+
+// Handle client activity to prevent timeout
+void monitorClient::updateClientActivity(int clientFd) {
+    Miterator it = fdsTracker.find(clientFd);
+    if (it != fdsTracker.end()) {
+        it->second.updateActivity();
+    }
+}
+
+

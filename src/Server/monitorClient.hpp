@@ -3,45 +3,35 @@
 #include "../HTTP/Common.hpp"
 #include "../HTTP/Request.hpp"
 #include <time.h>
-
+class Request;
 class sock;
 class monitorClient
+
 {
     public:
         //struct to use in the map that hold socket status  
         struct SocketTracker
         {
-            std::string request;  // Stores the client's request body
-            std::string response; // Stores the response to be sent to the client
-            int WError;           // Write error status
-            int RError;           // Read error status
-            time_t lastActive;    // Timestamp of the last activity
-            std::string host;      // Hostname of the client
-
-            std::string method;   // HTTP method (e.g., GET, POST)
-            std::string path;     // Request path
-            std::map<std::string, std::string> headers;       // Stores request headers
-            std::map<std::string, std::string> queryParams;   // Stores query parameters
-            std::map<std::string, std::string> cookies;       // Stores cookies
-            std::vector<std::string> chunks;                  // Stores chunks if the request is chunked
-            std::map<std::string, FilePart> uploads;          // Stores uploaded files
-            std::string error;    // Error message if any
+            Request *request_obj;      // Store the actual Request object
+            std::string response;     // Response to send back
+            std::string raw_buffer;   // Raw incoming data buffer
+            int WError;
+            int RError;
+            time_t lastActive;
+            std::string error;
             
-            // Additional fields for request parsing
-            bool headers_parsed;                              // Whether headers have been parsed
-            bool is_chunked;                                  // Whether the request uses chunked encoding
-            size_t expected_length;                           // Expected content length
+            // Remove duplicated fields that are now in request_obj:
+            // std::string method, path, host (these are in Request now)
+            // std::map<std::string, std::string> headers, queryParams, cookies
+            // etc.
             
-            // Constructor to initialize the tracker with current time
             SocketTracker() ;
+            void updateActivity()  ;
+          
             
-            // Update the last activity timestamp
-            void updateActivity() ;
-            
-            // Check if this client has timed out
             bool hasTimedOut(time_t currentTime, time_t timeoutSeconds) const ;
+            
         };
-        
         //Create a shortcut for the vector and map iterators to make them easier to use
         typedef std::vector<pollfd>::iterator Viterator;
         typedef std::map<int, SocketTracker>::iterator Miterator;
@@ -57,42 +47,7 @@ class monitorClient
         std::map<int, SocketTracker> fdsTracker;
         
         // Debug method to print request information after parsing
-        void printRequestInfo(int clientFd) {
-            Miterator it = fdsTracker.find(clientFd);
-            if (it != fdsTracker.end()) {
-                SocketTracker& tracker = it->second;
-                std::cout << "\n===== REQUEST INFO FOR CLIENT " << clientFd << " =====\n";
-                std::cout << "Method: " << tracker.method << "\n";
-                std::cout << "Path: " << tracker.path << "\n";
-                std::cout << "Headers parsed: " << (tracker.headers_parsed ? "Yes" : "No") << "\n";
-                std::cout << "Is chunked: " << (tracker.is_chunked ? "Yes" : "No") << "\n";
-                std::cout << "Expected length: " << tracker.expected_length << "\n";
-                std::cout << "Error: " << (tracker.error.empty() ? "None" : tracker.error) << "\n";
-                
-                std::cout << "Headers (" << tracker.headers.size() << "):\n";
-                for (std::map<std::string, std::string>::const_iterator h = tracker.headers.begin(); 
-                     h != tracker.headers.end(); ++h) {
-                    std::cout << "  " << h->first << ": " << h->second << "\n";
-                }
-                
-                std::cout << "Query Params (" << tracker.queryParams.size() << "):\n";
-                for (std::map<std::string, std::string>::const_iterator q = tracker.queryParams.begin(); 
-                     q != tracker.queryParams.end(); ++q) {
-                    std::cout << "  " << q->first << "=" << q->second << "\n";
-                }
-                
-                std::cout << "Cookies (" << tracker.cookies.size() << "):\n";
-                for (std::map<std::string, std::string>::const_iterator c = tracker.cookies.begin(); 
-                     c != tracker.cookies.end(); ++c) {
-                    std::cout << "  " << c->first << "=" << c->second << "\n";
-                }
-                
-                std::cout << "Request Buffer Length: " << tracker.request.size() << " bytes\n";
-                std::cout << "Response Buffer Length: " << tracker.response.size() << " bytes\n";
-                std::cout << "============================================\n\n";
-            }
-        }
-        
+
         // Timeout constants
         static const time_t CLIENT_TIMEOUT = 60;         // Client timeout in seconds (1 minute)
         static const time_t TIMEOUT_CHECK_INTERVAL = 10; // Check for timeouts every 10 seconds

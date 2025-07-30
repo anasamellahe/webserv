@@ -64,7 +64,6 @@ int monitorClient::readChunkFromClient(int clientFd, std::string& buffer) {
 // }
 
 int monitorClient::readClientRequest(int clientFd) {
-    // Find client in tracker
     auto it = fdsTracker.find(clientFd);
     if (it == fdsTracker.end()) {
         std::cerr << "Client " << clientFd << " not found in tracker" << std::endl;
@@ -73,132 +72,57 @@ int monitorClient::readClientRequest(int clientFd) {
 
     SocketTracker& tracker = it->second;
     
-    Request req(clientFd);
+    // Set clientFD in the request object if not already set
+    if (tracker.request_obj->getClientFD() != clientFd) {
+        tracker.request_obj->setClientFD(clientFd);
+    }
     
-    // Read chunk (up to 8KB)
+    // Read chunk
     std::string buffer;
     int readResult = readChunkFromClient(clientFd, buffer);
     
-    // Handle read status    
-    // try {
-    //     // Your existing code that parses the request
-    //     req.parseFromSocket(clientFd, buffer, readResult);
-    //     // ...
-    // } catch (int e) {
-    //     // Handle the integer exception
-    //     std::cerr << "Error code: " << e << " while parsing request" << std::endl;
-    //     req.setErrorCode("400 Bad Request");
-    // } catch (const std::exception& e) {
-    //     // Handle standard exceptions
-    //     std::cerr << "Exception: " << e.what() << std::endl;
-    //     req.setErrorCode("500 Internal Server Error");
-    // } catch (...) {
-    //     // Handle any other exceptions
-    //     std::cerr << "Unknown exception while parsing request" << std::endl;
-    //     req.setErrorCode("500 Internal Server Error");
-    // }
     if (readResult <= 0) {
-        if (readResult == 0) {  // Client closed connection
-
+        if (readResult == 0) {
             std::cout << "Client " << clientFd << " closed connection" << std::endl;
             return 0;
         }
-        if (readResult == -2) {  // Error occurred
+        if (readResult == -2) {
             std::cerr << "Error reading from client " << clientFd << std::endl;
             return -1;
         }
-        return 1; // No data but keep connection alive (EAGAIN/EWOULDBLOCK)
-    }
-
-    // Append to request buffer
-    tracker.request += buffer;
-    
-    // Check if headers exceed maximum size
-    if (tracker.request.size() > MAX_HEADER_SIZE && tracker.request.find("\r\n\r\n") == std::string::npos) {
-        req.setErrorCode("431 Request Header Fields Too Large");
-        return 0;
-    }
-
-    // Check for chunked transfer or content-length
-    size_t header_end = tracker.request.find("\r\n\r\n");
-    if (header_end == std::string::npos) {
-        // Headers not fully received yet, continue reading
         return 1;
     }
 
-
-    if (!tracker.headers.empty()) {
-        if (req.isChunked()) {
-            // Check if chunked transfer is complete
-            // For chunked transfers, check if the last chunk is received
-            size_t chunk_end = tracker.request.find("0\r\n\r\n");
-            if (chunk_end != std::string::npos) {
-                req.setComplete(true);
-            }
-        } else if (req.getContentLength() > 0) {
-            size_t header_end = tracker.request.find("\r\n\r\n");
-            if (header_end != std::string::npos) {
-                size_t body_start = header_end + 4;
-                size_t body_received = tracker.request.size() - body_start;
-                
-                if (body_received >= req.getContentLength()) {
-                    // We have the complete body
-                    req.setComplete(true);
-                    
-                    // Check if payload is too large
-                    if (body_received > req.getContentLength()) {
-                        req.setErrorCode("413 Payload Too Large");
-                        return 0;
-                    }
-                }
-            }
-        }
-    }
-
-    bool processed_data = false;
+    // Append to raw buffer
+    tracker.raw_buffer += buffer;
     
-    // Process complete requests in buffer
-    while (!tracker.request.empty()) {
-        Request req(clientFd); // New object for each parse
-
-        bool validity = req.parseFromSocket(clientFd, tracker.request, tracker.request.size());
-
-        if (!validity || !req.isValid()) {
-            if (!req.getErrorCode().empty()) {
-                // Fatal error - close connection
-                tracker.error = req.getErrorCode();
-                return 0;
-            }
-            // Incomplete request - stop processing and wait for more data
-            break;
-        }
-
-        // Complete request processing
-        tracker.method = req.getMethod();
-        tracker.path = req.getPath();
-        tracker.headers = req.getAllHeaders();
-        tracker.queryParams = req.getQueryParams();
-        tracker.cookies = req.getCookies();
-
-        // Remove processed data from buffer
-        size_t parsed_size = req.requestContent.size();
-        if (parsed_size == 0 || parsed_size > tracker.request.size()) {
-            // Defensive: avoid invalid erase or infinite loop
-            break;
-        }
-        tracker.request.erase(0, parsed_size);
-
-        // Mark that we processed data
-        processed_data = true;
-        
-        // Print debug information about the request
-        printRequestInfo(clientFd);
+    // Check header size limit
+    if (tracker.raw_buffer.size() > MAX_HEADER_SIZE && 
+        tracker.raw_buffer.find("\r\n\r\n") == std::string::npos) {
+        tracker.error = "431 Request Header Fields Too Large";
+        return 0;
     }
 
-    if (processed_data) {
+    // Try to parse the accumulated data
+    bool validity = tracker.request_obj->parseFromSocket(clientFd, tracker.raw_buffer, tracker.raw_buffer.size());
+
+    if (validity && tracker.request_obj->isValid()) {
+        // Request is complete and valid
         tracker.updateActivity();
+        
+        // Clear the buffer since request is complete
+        tracker.raw_buffer.clear();
+        
+        // Print debug info
+        
+        return 1; // Ready for response generation
+    } else if (!tracker.request_obj->getErrorCode().empty() && 
+               tracker.request_obj->getErrorCode() != "200 OK") {
+        // Fatal parsing error
+        tracker.error = tracker.request_obj->getErrorCode();
+        return 0;
     }
     
-    return 1; // Continue reading
+    // Incomplete request - continue reading
+    return 1;
 }
-
