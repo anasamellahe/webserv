@@ -30,38 +30,7 @@ int monitorClient::readChunkFromClient(int clientFd, std::string& buffer) {
         return -2;
     }
 }
-// int getMaxBodySizeOfServer(const std::string& host) {
-//     ConfigParser configParser;
-//     Config config;
 
-//     // Parse the configuration file
-//     if (!configParser.parseConfigFile("/path/to/config/file", config)) {
-//         std::cerr << "Failed to parse configuration file" << std::endl;
-//         return -1; // Return an error code
-//     }
-
-//     // Extract host and port from the input string
-//     std::string serverHost, serverPort;
-//     size_t colonPos = host.find(':');
-//     if (colonPos != std::string::npos) {
-//         serverHost = host.substr(0, colonPos);
-//         serverPort = host.substr(colonPos + 1);
-//     } else {
-//         serverHost = host;
-//         serverPort = "80"; // Default to port 80 if not specified
-//     }
-
-//     // Search for the server block matching the host, port, or server name
-//     for (const auto& server : config.servers) {
-//         if ((server.host == serverHost && server.port == serverPort) || 
-//             (std::find(server.serverNames.begin(), server.serverNames.end(), serverHost) != server.serverNames.end())) {
-//             return server.maxBodySize; // Return the max body size for the matched server
-//         }
-//     }
-
-//     // If no matching server block is found, return a default value
-//     return 1024 * 1024; // Default max body size (1MB)
-// }
 
 int monitorClient::readClientRequest(int clientFd) {
     auto it = fdsTracker.find(clientFd);
