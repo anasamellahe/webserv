@@ -2,11 +2,6 @@
 #include "../main.hpp"
 #include "../HTTP/Common.hpp"
 #include "../HTTP/Request.hpp"
-
-#pragma once
-#include "../main.hpp"
-#include "../HTTP/Common.hpp"
-#include "../HTTP/Request.hpp"
 #include <time.h>
 
 class sock;
@@ -92,7 +87,6 @@ class monitorClient
                     std::cout << "  " << c->first << "=" << c->second << "\n";
                 }
                 
-                std::cout << "Finished Requests: " << tracker.finishedRequests.size() << "\n";
                 std::cout << "Request Buffer Length: " << tracker.request.size() << " bytes\n";
                 std::cout << "Response Buffer Length: " << tracker.response.size() << " bytes\n";
                 std::cout << "============================================\n\n";

@@ -9,8 +9,32 @@
 
 #define CHUNK_SIZE 8192 // Define the chunk size for reading data
 monitorClient::SocketTracker::SocketTracker() 
-    : WError(0), RError(0), lastActive(time(NULL)), 
-      headers_parsed(false), is_chunked(false), expected_length(0) {
+    : WError(0), 
+      RError(0), 
+      lastActive(time(NULL)), 
+      headers_parsed(false), 
+      is_chunked(false), 
+      expected_length(0)
+{
+    // Explicitly initialize all string members
+    request = "";
+    response = "";
+    host = "";
+    method = "";
+    path = "";
+    error = "";
+    
+    // Clear all containers to ensure they're properly initialized
+    headers.clear();
+    queryParams.clear();
+    cookies.clear();
+    chunks.clear();
+    uploads.clear();
+    
+    // Ensure time is properly set
+    if (lastActive == 0) {
+        lastActive = time(NULL);
+    }
 }
 bool monitorClient::shouldCheckTimeouts(time_t currentTime) {
     // Determine if enough time has passed to check for timeouts

@@ -80,32 +80,31 @@ int monitorClient::readClientRequest(int clientFd) {
     int readResult = readChunkFromClient(clientFd, buffer);
     
     // Handle read status    
-    try {
-        // Your existing code that parses the request
-        req.parseFromSocket(clientFd, buffer, readResult);
-        // ...
-    } catch (int e) {
-        // Handle the integer exception
-        std::cerr << "Error code: " << e << " while parsing request" << std::endl;
-        req.setErrorCode("400 Bad Request");
-    } catch (const std::exception& e) {
-        // Handle standard exceptions
-        std::cerr << "Exception: " << e.what() << std::endl;
-        req.setErrorCode("500 Internal Server Error");
-    } catch (...) {
-        // Handle any other exceptions
-        std::cerr << "Unknown exception while parsing request" << std::endl;
-        req.setErrorCode("500 Internal Server Error");
-    }
+    // try {
+    //     // Your existing code that parses the request
+    //     req.parseFromSocket(clientFd, buffer, readResult);
+    //     // ...
+    // } catch (int e) {
+    //     // Handle the integer exception
+    //     std::cerr << "Error code: " << e << " while parsing request" << std::endl;
+    //     req.setErrorCode("400 Bad Request");
+    // } catch (const std::exception& e) {
+    //     // Handle standard exceptions
+    //     std::cerr << "Exception: " << e.what() << std::endl;
+    //     req.setErrorCode("500 Internal Server Error");
+    // } catch (...) {
+    //     // Handle any other exceptions
+    //     std::cerr << "Unknown exception while parsing request" << std::endl;
+    //     req.setErrorCode("500 Internal Server Error");
+    // }
     if (readResult <= 0) {
         if (readResult == 0) {  // Client closed connection
-            req.setErrorCode("400 Bad Request");
+
             std::cout << "Client " << clientFd << " closed connection" << std::endl;
             return 0;
         }
         if (readResult == -2) {  // Error occurred
             std::cerr << "Error reading from client " << clientFd << std::endl;
-            req.setErrorCode("500 Internal Server Error");
             return -1;
         }
         return 1; // No data but keep connection alive (EAGAIN/EWOULDBLOCK)
