@@ -88,16 +88,16 @@ class ConfigParser
 
         int parseServerKeyValue(const std::string& key, const std::string& value, Config::ServerConfig& server);
         int parseRouteKeyValue(const std::string& key, const std::string& value, Config::RouteConfig& route);
-        int parseConfigFile(const std::string& filename, Config& config);
+        int parseConfigFile(const std::string& filename); //, Config& config
         void printConfig(const Config& config) const;
-        void initializeServerListenAddresses(const Config& config);
+        void initializeServerListenAddresses();  // remove the config variable and use the one inside the class 
         void initializeServerMap(std::map<std::string, Config::ServerConfig>& server_map, const Config& config) const;
         void initializeRouteMap(std::map<std::string, Config::RouteConfig>& route_map, const Config& config) const;
-
         std::vector<std::pair<std::string, int> > getServerListenAddresses() const;
         Config::ServerConfig getServerMap(const std::string& server_name) const;
         std::map<std::string, Config::RouteConfig> getRouteMap() const;
         void printServerListenAddresses(std::vector<std::pair<std::string, int> > server_listen_addresses);
-};
+        const Config getConfig(); // i add this line 
+    };
 
 #endif

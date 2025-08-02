@@ -3,10 +3,11 @@
 #include <sstream>
 
 
-void ConfigParser::initializeServerListenAddresses(const Config& config)
+void ConfigParser::initializeServerListenAddresses()
 {
-    for (size_t i = 0; i < config.servers.size(); ++i) {
-        const Config::ServerConfig& server = config.servers[i];
+
+    for (size_t i = 0; i < this->config.servers.size(); ++i) {
+        const Config::ServerConfig& server = this->config.servers[i];
         for (size_t j = 0; j < server.ports.size(); ++j) {
             std::pair<std::string, int> address(server.host, server.ports[j]);
                         bool isDuplicate = false;
@@ -21,7 +22,6 @@ void ConfigParser::initializeServerListenAddresses(const Config& config)
                 this->server_listen_addresses.push_back(address);
             }
             // if we dont find the address in the vector we add it
-
            
         }
     }

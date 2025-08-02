@@ -196,8 +196,8 @@ int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& 
     return 0;  // Return 0 to indicate success
 }
 
-int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
-{
+int ConfigParser::parseConfigFile(const std::string& filename ) // Config& config
+ {
     std::ifstream file(filename.c_str());
     if (!file.is_open()) {
         std::cerr << "Error: Could not open config file: " << filename << std::endl;
@@ -233,7 +233,7 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
                         delete currentRoute;
                         currentRoute = NULL;
                     }
-                    config.servers.push_back(*currentServer);
+                    this->config.servers.push_back(*currentServer);
                     delete currentServer;
                 }
                 
@@ -396,22 +396,22 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
     }
 
     if (currentServer != NULL) {
-        config.servers.push_back(*currentServer);
+        this->config.servers.push_back(*currentServer);
         delete currentServer;
     }
     
     // Set default port 8080 if no port is specified in any server
-    for (size_t i = 0; i < config.servers.size(); i++) {
-        if (config.servers[i].ports.empty()) {
-            config.servers[i].ports.push_back(8080);
+    for (size_t i = 0; i < this->config.servers.size(); i++) {
+        if (this->config.servers[i].ports.empty()) {
+            this->config.servers[i].ports.push_back(8080);
         }
         // Host is already initialized to 0.0.0.0 by default
     }
     
     // Check for duplicate server names across servers
     std::map<std::string, bool> serverNameMap;
-    for (size_t i = 0; i < config.servers.size(); i++) {
-        for (const auto& name : config.servers[i].server_names) {
+    for (size_t i = 0; i < this->config.servers.size(); i++) {
+        for (const auto& name : this->config.servers[i].server_names) {
             if (serverNameMap.find(name) != serverNameMap.end()) {
                 std::cerr << "Error: Duplicate server_name '" << name 
                           << "' detected across multiple servers" << std::endl;
@@ -422,10 +422,10 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
     }
     
     // Check for duplicate redirects in routes within each server
-    for (size_t i = 0; i < config.servers.size(); i++) {
+    for (size_t i = 0; i < this->config.servers.size(); i++) {
         std::map<std::string, bool> pathMap; // map to track paths
-        for (size_t j = 0; j < config.servers[i].routes.size(); j++) {
-            Config::RouteConfig& route = config.servers[i].routes[j];
+        for (size_t j = 0; j < this->config.servers[i].routes.size(); j++) {
+            Config::RouteConfig& route = this->config.servers[i].routes[j];
             std::string path = route.path;
             
             // Check if this path was already defined in another route
@@ -439,7 +439,7 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
     }
     
     // Print a message if no root directive was found
-    if (!hasRootDirective && config.servers.size() > 0) {
+    if (!hasRootDirective && this->config.servers.size() > 0) {
         std::cerr << "Warning: no \"root\" directive in server" << std::endl;
         return -1;
     }
@@ -526,4 +526,10 @@ void ConfigParser::printConfig(const Config& config) const
         
         std::cout << std::endl;
     }
+}
+
+
+const Config ConfigParser::getConfig()
+{
+    return this->config;
 }

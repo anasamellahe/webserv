@@ -27,6 +27,7 @@ class Request
     public:
 
         int clientFD;
+        // Config      serverConfig;
         std::string requestContent;
         std::string method;             
         std::string path;                
