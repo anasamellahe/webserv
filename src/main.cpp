@@ -2,19 +2,13 @@
 #include "HTTP/Request.hpp"
 #include "Socket/socket.hpp"
 #include "Server/monitorClient.hpp"
-#include <iostream>
-#include <string>
-#include <unistd.h>
-#include <cstring>
+#include "Config/ConfigParser.hpp"
 
-
-void printConfig(const Config& config)
-{
+void printConfig(const Config& config) {
     std::cout << "\n========== CONFIGURATION SUMMARY ==========\n";
     std::cout << "Total servers: " << config.servers.size() << "\n\n";
     
-    for (size_t i = 0; i < config.servers.size(); i++)
-    {
+    for (size_t i = 0; i < config.servers.size(); i++) {
         const Config::ServerConfig& server = config.servers[i];
         
         std::cout << "┌─────────────────────────────────────────┐\n";
@@ -91,11 +85,8 @@ void printConfig(const Config& config)
 }
 
 int main(int argc, char** argv) {
-   
     try {
         ConfigParser config_parser;
-
-        // Use default config file
         const char* config_file = "src/config.conf";
         if (argc > 2) {
             config_file = argv[2];
@@ -112,7 +103,6 @@ int main(int argc, char** argv) {
             monitorClient mc(socketCreate.getFDs());
             std::cout << "Starting event loop..." << std::endl;
             mc.startEventLoop();
-            
         } else {
             std::cerr << "Error parsing configuration file." << std::endl;
         }

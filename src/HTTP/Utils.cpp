@@ -1,4 +1,5 @@
 #include "Utils.hpp"
+#include <cctype>
 
 std::string stringToLower(std::string& str)
 {

@@ -1,83 +1,206 @@
 #pragma once
 
-#include "../main.hpp"
+#include <vector>
+#include <map>
+#include <poll.h>
+#include <time.h>
 #include "../HTTP/Common.hpp"
 #include "../HTTP/Request.hpp"
-#include <time.h>
 
-class Request;
 class sock;
-class monitorClient
 
-{
-    public:
-        //struct to use in the map that hold socket status  
-        struct SocketTracker
-        {
-            Request *request_obj;      // Store the actual Request object
-            
-            std::string response;     // Response to send back
-            std::string raw_buffer;   // Raw incoming data buffer
-            int WError;
-            int RError;
-            time_t lastActive;
-            std::string error;
-    
-            SocketTracker() ;
-            void updateActivity()  ; // checked  by Anas and it work perfectly
-            bool hasTimedOut(time_t currentTime, time_t timeoutSeconds) const ; // checked  by Anas and it work perfectly
-            
-        };
-        //Create a shortcut for the vector and map iterators to make them easier to use
-        typedef std::vector<pollfd>::iterator Viterator;
-        typedef std::map<int, SocketTracker>::iterator Miterator;
-        typedef std::vector<pollfd>::const_iterator CViterator;
-        typedef std::map<int, SocketTracker>::const_iterator CMiterator;
+/**
+ * @brief Client connection monitor and event handler class
+ * 
+ * This class manages multiple client connections using poll() system call,
+ * handles client timeouts, request reading, and response writing.
+ * It supports non-blocking I/O operations and efficient connection management.
+ */
+class monitorClient {
+public:
+    /**
+     * @brief Tracks individual socket connection state and data
+     * 
+     * Contains all information needed to handle a client connection including
+     * request parsing, response generation, error handling, and timeout tracking.
+     */
+    struct SocketTracker {
+        Request request_obj;      // Parsed HTTP request object
+        std::string response;     // Generated HTTP response
+        std::string raw_buffer;   // Raw incoming data buffer
+        int WError;              // Write error status
+        int RError;              // Read error status  
+        time_t lastActive;       // Last activity timestamp
+        std::string error;       // Error message if any
 
+        /**
+         * @brief Default constructor - initializes tracker with current time
+         */
+        SocketTracker();
+
+        /**
+         * @brief Updates the last activity timestamp to current time
+         * Used to prevent timeout for active connections
+         */
+        void updateActivity();
+
+        /**
+         * @brief Checks if connection has exceeded timeout threshold
+         * @param currentTime Current system time
+         * @param timeoutSeconds Timeout threshold in seconds
+         * @return true if connection has timed out
+         */
+        bool hasTimedOut(time_t currentTime, time_t timeoutSeconds) const;
+    };
+
+    // Iterator type definitions for container access
+    typedef std::vector<pollfd>::iterator PollFdsIt;
+    typedef std::map<int, SocketTracker>::iterator TrackerIt;
+    typedef std::vector<pollfd>::const_iterator CPollFdsIt;
+    typedef std::map<int, SocketTracker>::const_iterator CTrackerIt;
+
+private:
+    std::vector<pollfd> fds;                    // Poll file descriptors array
+    size_t numberOfServers;                     // Number of server sockets
+    std::map<int, SocketTracker> fdsTracker;    // Connection tracking map
+
+    // Timeout and chunk size constants
+    static const time_t CLIENT_TIMEOUT = 60;           // Client timeout (60 seconds)
+    static const time_t TIMEOUT_CHECK_INTERVAL = 10;   // Timeout check interval
+    static const size_t CHUNK_SIZE = 8192;             // Read chunk size (8KB)
+    time_t lastTimeoutCheck;                           // Last timeout check time
+
+    /**
+     * @brief Accepts new client connection from server socket
+     * @param serverFD Server socket file descriptor
+     * Sets up non-blocking client socket and adds to monitoring list
+     */
+    void acceptNewClient(int serverFD);
+
+    /**
+     * @brief Removes client connection and cleans up resources
+     * @param index Index of client in fds vector
+     * Closes socket, removes from vectors and maps
+     */
+    void removeClient(int index);
+
+    /**
+     * @brief Reads data chunk from client socket
+     * @param clientFd Client socket file descriptor
+     * @param buffer Reference to buffer to store read data
+     * @return Number of bytes read, 0 for EOF, negative for error/no-data
+     */
+    int readChunkFromClient(int clientFd, std::string& buffer);
+
+    /**
+     * @brief Reads and processes HTTP request from client
+     * @param clientFd Client socket file descriptor
+     * @return 1 for continue, 0 for close connection, -1 for error
+     * Handles chunked reading and request parsing
+     */
+    int readClientRequest(int clientFd);
+
+    /**
+     * @brief Checks if HTTP request is complete
+     * @param tracker Reference to socket tracker
+     * @return true if request parsing is complete
+     */
+    bool isRequestComplete(SocketTracker& tracker);
+
+    /**
+     * @brief Checks request completion after finding headers end
+     * @param tracker Reference to socket tracker
+     * @param headerEnd Position where headers end
+     * @return true if full request is available
+     */
+    bool checkRequestCompletion(SocketTracker& tracker, size_t headerEnd);
+
+    /**
+     * @brief Writes HTTP response to client socket
+     * @param clientFd Client socket file descriptor
+     * Handles partial writes and connection management
+     */
+    void writeClientResponse(int clientFd);
+
+    /**
+     * @brief Checks all connections for timeout and handles timeouts
+     * Generates timeout responses for clients that exceed time limit
+     */
+    void checkTimeouts();
+
+    /**
+     * @brief Removes connections that have timed out
+     * Called after timeout detection to clean up dead connections
+     */
+    void removeTimedOutClients();
+
+    /**
+     * @brief Determines if enough time has passed to check timeouts
+     * @param now Current system time
+     * @return true if timeout check should be performed
+     */
+    bool shouldCheckTimeouts(time_t now);
+
+    /**
+     * @brief Initializes timeout tracking system
+     * Sets up initial timeout check timestamp
+     */
+    void initializeTimeouts();
+
+    /**
+     * @brief Updates activity timestamp for specific client
+     * @param clientFd Client socket file descriptor
+     * Prevents timeout for active connections
+     */
+    void updateClientActivity(int clientFd);
+
+public:
+    /**
+     * @brief Exception class for monitor client errors
+     * 
+     * Custom exception type for handling monitor client specific errors
+     * like socket operations, poll failures, etc.
+     */
+    class monitorexception : public std::exception {
     private:
-        //socket that i ned to monitor with poll
-        std::vector<pollfd> fds;
-        //number of servers in the fds vector
-        size_t numberOfServers;
-        //map to track each socket status 
-        std::map<int, SocketTracker> fdsTracker;
-        
-
-        // Timeout constants
-        static const time_t     CLIENT_TIMEOUT = 60;                        // Client timeout in seconds (1 minute)
-        static const time_t     TIMEOUT_CHECK_INTERVAL = 10;                // Check for timeouts every 10 seconds
-        static const size_t     CHUNK_SIZE = 8192;                          // 8KB chunk size
-        time_t                  lastTimeoutCheck;                           // Last time we checked for timeouts
-
-        void acceptNewClient(int serverFD);                                 // checked  by Anas and it work perfectly
-
-        void removeClient(int index);                                       // checked  by Anas and it work perfectly
-
-        int     readChunkFromClient(int clientFd, std::string& buffer);
-        int     readClientRequest(int clientFd);                            // Updated to handle 8KB chunks and parsing
-        bool    isRequestComplete(SocketTracker& tracker);
-        bool    checkRequestCompletion(SocketTracker& tracker, size_t headerEnd);
-        void    writeClientResponse(int clientFd);
-        
-        // Timeout related methods
-        void    checkTimeouts();                                            // Check all clients for timeout   // checked  by Anas and it work perfectly
-        void    removeTimedOutClients();                                    // Remove clients that have timed out
-        bool    shouldCheckTimeouts(time_t now);                            // Determine if it's time to check for timeouts // checked  by Anas and it work perfectly
-        void    initializeTimeouts();                                       // Initialize timeout settings // checked  by Anas and it work perfectly
-        void    updateClientActivity(int clientFd);                         // Update activity timestamp for a client // checked  by Anas and it work perfectly
+        std::string ErrorMsg;   // Error message string
 
     public:
-        class monitorexception : public std::exception
-        {
-            private:
-                std::string ErrorMsg;
-            public:
-                monitorexception(std::string msg);
-                const char *what () const throw();
-                ~monitorexception() throw();
-        };
-        //set up the pollFds of each server and stor them in a vector of fds
-        monitorClient(std::vector<int> serverFDs);      // checked  by Anas and it work perfectly
-        void    startEventLoop();                       //checked  by Anas and it needs some extra works
-        ~monitorClient();                               // checked  by Anas and it work perfectly
+        /**
+         * @brief Constructor with error message
+         * @param msg Error message describing the exception
+         */
+        monitorexception(std::string msg);
+
+        /**
+         * @brief Returns error message as C-string
+         * @return Pointer to error message C-string
+         */
+        const char *what() const throw();
+
+        /**
+         * @brief Destructor - cleans up exception resources
+         */
+        ~monitorexception() throw();
+    };
+
+    /**
+     * @brief Constructor - initializes monitor with server sockets
+     * @param serverFDs Vector of server socket file descriptors
+     * Sets up poll structures for all server sockets
+     */
+    monitorClient(std::vector<int> serverFDs);
+
+    /**
+     * @brief Main event loop - monitors all connections and handles events
+     * Runs indefinitely, handling new connections, client requests,
+     * responses, and timeouts using poll() system call
+     */
+    void startEventLoop();
+
+    /**
+     * @brief Destructor - closes all file descriptors and cleans up
+     * Ensures all sockets are properly closed before destruction
+     */
+    ~monitorClient();
 };

@@ -1,13 +1,9 @@
 #pragma once
 
-#include <fcntl.h>
 #include <vector>
-#include <map>
 #include <utility>
-#include <iostream>
 #include <string>
-#include <algorithm>
-#include <sys/socket.h>
+#include <iostream>
 #include <netinet/in.h>
 #include <cstring>
 #include <unistd.h>
@@ -20,8 +16,12 @@
 #include "Socket/socket.hpp"
 #include "Config/ConfigParser.hpp"
 #include "Server/monitorClient.hpp"
-
 #include "HTTP/Request.hpp"
+
+class sock;
+class ConfigParser;
+class monitorClient;
+struct Config;
 #include "Socket/socket.hpp"
 #include "Server/monitorClient.hpp"
 #include <iostream>
