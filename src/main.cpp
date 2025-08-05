@@ -88,8 +88,8 @@ int main(int argc, char** argv) {
     try {
         ConfigParser config_parser;
         const char* config_file = "src/config.conf";
-        if (argc > 2) {
-            config_file = argv[2];
+        if (argc >= 2) {
+            config_file = argv[1];
         }
         
         int parse_config = config_parser.parseConfigFile(config_file);
