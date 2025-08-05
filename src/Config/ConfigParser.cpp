@@ -1,21 +1,12 @@
 #include "ConfigParser.hpp"
-#include <fstream>
-#include <sstream>
 
-#include "ConfigParser.hpp"
-#include <fstream>
-#include <sstream>
-
-int ConfigParser::parseServerKeyValue(const std::string& key, const std::string& value, Config::ServerConfig& server)
-{
-    // Check for quotes and reject them
+int ConfigParser::parseServerKeyValue(const std::string& key, const std::string& value, Config::ServerConfig& server) {
     if (value.find('"') != std::string::npos) {
         std::cerr << "Error: Quotes are not allowed in values: " << key << " = " << value << std::endl;
         return -1;
     }
 
     if (key == "port") {
-        // Check if port contains only digits
         for (size_t i = 0; i < value.length(); i++) {
             if (!isdigit(value[i])) {
                 std::cerr << "Error: Port must be a valid integer: " << value << std::endl;
@@ -59,11 +50,10 @@ int ConfigParser::parseServerKeyValue(const std::string& key, const std::string&
         server.error_pages[errorCode] = value;
     }
     else if (key == "client_max_body_size") {
-        if (server.client_max_body_size != 0) {
+        if (server.client_max_body_size != 1048576) {
             std::cerr << "Error: Duplicate key 'client_max_body_size' detected" << std::endl;
             return -1;
         }
-        // Check if body size contains only digits
         for (size_t i = 0; i < value.length(); i++) {
             if (!isdigit(value[i])) {
                 std::cerr << "Error: Client max body size must be a valid integer: " << value << std::endl;
@@ -79,7 +69,6 @@ int ConfigParser::parseServerKeyValue(const std::string& key, const std::string&
             std::cerr << "Error: Client max body size exceeds maximum limit: " << value << std::endl;
             return -1;
         }
-        server.chunked_transfer = false;
     }
     else if (key == "default_server") {
         if (server.default_server != false) {
@@ -91,9 +80,7 @@ int ConfigParser::parseServerKeyValue(const std::string& key, const std::string&
     return 0;
 }
 
-int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& value, Config::RouteConfig& route)
-{
-    // Check for quotes and reject them
+int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& value, Config::RouteConfig& route) {
     if (value.find('"') != std::string::npos) {
         std::cerr << "Error: Quotes are not allowed in values: " << key << " = " << value << std::endl;
         return -1;
@@ -106,7 +93,6 @@ int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& 
         }
         route.path = value;
     }
-
     else if (key == "accepted_methods") {
         if (!route.accepted_methods.empty()) {
             std::cerr << "Error: Duplicate key 'accepted_methods' detected" << std::endl;
@@ -115,7 +101,6 @@ int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& 
         std::istringstream iss(value);
         std::string method;
         while (iss >> method) {
-
             if (method != "GET" && method != "POST" && method != "DELETE") {
                 std::cerr << "Error: Invalid HTTP method: " << method << std::endl;
                 return -1;
@@ -138,7 +123,6 @@ int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& 
         size_t spacePos = value.find(' ');
         if (spacePos != std::string::npos) {
             std::string codeStr = value.substr(0, spacePos);
-            // Check if redirect code contains only digits
             for (size_t i = 0; i < codeStr.length(); i++) {
                 if (!isdigit(codeStr[i])) {
                     std::cerr << "Error: Redirect code must be a valid integer: " << codeStr << std::endl;
@@ -152,9 +136,8 @@ int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& 
             }
             route.redirect_url = value.substr(spacePos + 1);
         } else {
-            // If no space found, assume the entire value is the URL with default code
-            route.redirect_code = 301; // Default redirect code
-            route.redirect_url = value; // Use the entire value as URL
+            route.redirect_code = 301;
+            route.redirect_url = value;
         }
     }
     else if (key == "directory_listing") {
@@ -198,11 +181,10 @@ int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& 
         route.upload_path = value;
         route.upload_enabled = true;
     }
-    return 0;  // Return 0 to indicate success
+    return 0;
 }
 
-int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
-{
+int ConfigParser::parseConfigFile(const std::string& filename) {
     std::ifstream file(filename.c_str());
     if (!file.is_open()) {
         std::cerr << "Error: Could not open config file: " << filename << std::endl;
@@ -217,77 +199,64 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
     bool hasRootDirective = false;
 
     while (std::getline(file, line)) {
-        // Skip empty lines and trim whitespace
         if (line.empty() || line.find_first_not_of(" \t") == std::string::npos) {
             continue;
         }
         
-        // Trim leading whitespace
         line.erase(0, line.find_first_not_of(" \t"));
         if (line.empty()) {
             continue;
         }
 
-        // Skip comments (lines starting with #)
         if (line[0] == '#') {
             if (line.find("#server") != std::string::npos) {
-                // Finish previous server if exists
                 if (currentServer != NULL) {
                     if (currentRoute != NULL) {
                         currentServer->routes.push_back(*currentRoute);
                         delete currentRoute;
                         currentRoute = NULL;
                     }
-                    config.servers.push_back(*currentServer);
+                    this->config.servers.push_back(*currentServer);
                     delete currentServer;
                 }
                 
-                // Create new server
                 currentServer = new Config::ServerConfig();
-                // Initialize server defaults
-                currentServer->host = "0.0.0.0";  // Default to all interfaces
+                currentServer->host = "0.0.0.0";
                 currentServer->default_server = false;
-                currentServer->client_max_body_size = 0; // No default size - use chunked transfer
-                currentServer->chunked_transfer = true;  // Default to chunked transfer
-                currentServer->root = "/var/www/html"; // Default root
+                currentServer->client_max_body_size = 1048576;
+                currentServer->root = "/var/www/html";
                 isServerSection = true;
                 isRouteSection = false;
             }
             else if (line.find("#route") != std::string::npos) { 
-                 
-                  hasRootDirective = true;
+                hasRootDirective = true;
                 if (currentServer == NULL) {
                     std::cerr << "Error: Route defined outside of server context" << std::endl;
-                    // Clean up resources before returning
                     if (currentRoute != NULL) {
                         delete currentRoute;
                     }
                     return -1;
                 }
                 
-                // Save previous route if exists
                 if (currentRoute != NULL) {
                     currentServer->routes.push_back(*currentRoute);
                     delete currentRoute;
                 }
                 
-                // Create new route
                 currentRoute = new Config::RouteConfig();
-                // Initialize route defaults
-                currentRoute->path = "/"; // Default path to root
+                currentRoute->path = "/";
                 currentRoute->directory_listing = false;
                 currentRoute->has_redirect = false;
-                currentRoute->redirect_code = 301; // Default redirect code
+                currentRoute->redirect_code = 301;
                 currentRoute->cgi_enabled = false;
                 currentRoute->upload_enabled = false;
                 if (currentServer && !currentServer->root.empty()) {
-                    currentRoute->root = currentServer->root; // Inherit from server
+                    currentRoute->root = currentServer->root;
                 }
                 
-                // Extract path from the route declaration if available
                 size_t pathStart = line.find("path=");
                 if (pathStart != std::string::npos) {
-                    pathStart += 5; // Length of "path="
+                    pathStart += 5;
                     size_t pathEnd = line.find(" ", pathStart);
                     if (pathEnd != std::string::npos) {
                         currentRoute->path = line.substr(pathStart, pathEnd - pathStart);
@@ -302,15 +271,13 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
             continue;
         }
 
-        // Skip line if it starts with a comment or #
         if (line[0] == '#' || line.substr(0, 2) == "//") {
             continue;
         }
-          int number_of_equals = 0; 
-        // Parse key-value pairs
+
+        int number_of_equals = 0; 
         size_t equalsPos = line.find('=');
         if (equalsPos != std::string::npos) {
-            // Count the number of equals signs
             for (size_t i = 0; i < line.length(); i++) {
                 if (line[i] == '=') {
                     number_of_equals++;
@@ -321,8 +288,8 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
                 return -1;
             }
         }
+
         if (equalsPos == std::string::npos) {
-            // Check for error_page format: error_page code = path
             std::istringstream iss(line);
             std::string directive, code, equals, path;
             
@@ -330,13 +297,11 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
                 if (currentServer != NULL && isServerSection) {
                     int errorCode = std::atoi(code.c_str());
                     
-                    // Check for quotes and reject them
                     if (path.find('"') != std::string::npos) {
                         std::cerr << "Error: Quotes are not allowed in values: error_page " << code << " = " << path << std::endl;
                         continue;
                     }
                     
-                    // Check for duplicates
                     if (currentServer->error_pages.find(errorCode) != currentServer->error_pages.end()) {
                         std::cerr << "Error: Duplicate error_page code " << errorCode << " detected" << std::endl;
                         continue;
@@ -345,19 +310,17 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
                     currentServer->error_pages[errorCode] = path;
                 }
             }
-            continue; // Skip other lines without '='
+            continue;
         }
 
         std::string key = line.substr(0, equalsPos);
         std::string value = line.substr(equalsPos + 1);
 
-        // Trim whitespace
         key.erase(0, key.find_first_not_of(" \t"));
         key.erase(key.find_last_not_of(" \t") + 1);
         value.erase(0, value.find_first_not_of(" \t"));
         value.erase(value.find_last_not_of(" \t") + 1);
         
-        // Remove comments from value
         size_t commentPos = value.find('#');
         if (commentPos != std::string::npos) {
             value = value.substr(0, commentPos);
@@ -366,7 +329,6 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
         if (isServerSection && currentServer != NULL) {
             if(parseServerKeyValue(key, value, *currentServer) == -1) {
                 std::cerr << "Error parsing server key-value: " << key << " = " << value << std::endl;
-                // Clean up resources before returning
                 if (currentRoute != NULL) {
                     delete currentRoute;
                 }
@@ -377,14 +339,12 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
         else if (isRouteSection && currentRoute != NULL) {
             if(parseRouteKeyValue(key, value, *currentRoute) == -1) {
                 std::cerr << "Error parsing route key-value: " << key << " = " << value << std::endl;
-                // Clean up resources before returning
                 delete currentRoute;
                 return -1;
             }
         }
         else {
             std::cerr << "Error: Key-value pair outside of server or route context: " << key << " = " << value << std::endl;
-            // Clean up resources before returning
             if (currentRoute != NULL) {
                 delete currentRoute;
             }
@@ -395,53 +355,41 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
         }
     }
 
-    // Add the last server and route
     if (currentRoute != NULL && currentServer != NULL) {
         currentServer->routes.push_back(*currentRoute);
         delete currentRoute;
     }
 
     if (currentServer != NULL) {
-        config.servers.push_back(*currentServer);
+        this->config.servers.push_back(*currentServer);
         delete currentServer;
     }
     
-    // Set default port 8080 if no port is specified in any server
-    for (size_t i = 0; i < config.servers.size(); i++) {
-        if (config.servers[i].ports.empty()) {
-            config.servers[i].ports.push_back(8080);
-        }
-        // Host is already initialized to 0.0.0.0 by default
-        
-        // If client_max_body_size is not set (0), enable chunked transfer
-        if (config.servers[i].client_max_body_size == 0) {
-            config.servers[i].chunked_transfer = true;
-        } else {
-            config.servers[i].chunked_transfer = false;
+    for (size_t i = 0; i < this->config.servers.size(); i++) {
+        if (this->config.servers[i].ports.empty()) {
+            this->config.servers[i].ports.push_back(8080);
         }
     }
     
-    // Check for duplicate server names across servers
     std::map<std::string, bool> serverNameMap;
-    for (size_t i = 0; i < config.servers.size(); i++) {
-        for (const auto& name : config.servers[i].server_names) {
-            if (serverNameMap.find(name) != serverNameMap.end()) {
-                std::cerr << "Error: Duplicate server_name '" << name 
+    for (size_t i = 0; i < this->config.servers.size(); i++) {
+        for (Config::ServerConfig::ConstServerNameIterator name = this->config.servers[i].server_names.begin(); 
+             name != this->config.servers[i].server_names.end(); ++name) {
+            if (serverNameMap.find(*name) != serverNameMap.end()) {
+                std::cerr << "Error: Duplicate server_name '" << *name 
                           << "' detected across multiple servers" << std::endl;
                 return -1;
             }
-            serverNameMap[name] = true;
+            serverNameMap[*name] = true;
         }
     }
     
-    // Check for duplicate redirects in routes within each server
-    for (size_t i = 0; i < config.servers.size(); i++) {
-        std::map<std::string, bool> pathMap; // map to track paths
-        for (size_t j = 0; j < config.servers[i].routes.size(); j++) {
-            Config::RouteConfig& route = config.servers[i].routes[j];
+    for (size_t i = 0; i < this->config.servers.size(); i++) {
+        std::map<std::string, bool> pathMap;
+        for (size_t j = 0; j < this->config.servers[i].routes.size(); j++) {
+            Config::RouteConfig& route = this->config.servers[i].routes[j];
             std::string path = route.path;
             
-            // Check if this path was already defined in another route
             if (pathMap.find(path) != pathMap.end()) {
                 std::cerr << "Error: Duplicate path '" << path 
                           << "' detected in server " << i + 1 << std::endl;
@@ -451,8 +399,7 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
         }
     }
     
-    // Print a message if no root directive was found
-    if (!hasRootDirective && config.servers.size() > 0) {
+    if (!hasRootDirective && this->config.servers.size() > 0) {
         std::cerr << "Warning: no \"root\" directive in server" << std::endl;
         return -1;
     }
@@ -461,88 +408,14 @@ int ConfigParser::parseConfigFile(const std::string& filename, Config& config)
     return 0;
 }
 
-void print_vector(const std::vector<std::string>& vec) {
-    std::cout << "Vector contents: ";
-    for (const auto& str : vec) {
-        std::cout << str << " ";
-    }
-    std::cout << std::endl;
+const Config ConfigParser::getConfigs() {
+    return this->config;
 }
 
-void ConfigParser::printConfig(const Config& config) const
-{
-    std::cout << "Configuration:" << std::endl;
-    if (config.servers.empty()) {
-        std::cout << "No servers configured." << std::endl;
-        return;
-    }
-    
-    for (const auto& server : config.servers) {
-        std::cout << "Server Configuration:" << std::endl;
-        std::cout << "  Host: " << server.host << std::endl;
-        std::cout << "  Ports: ";
-        for (const auto& port : server.ports) {
-            std::cout << port << " ";
-        }
-        std::cout << std::endl;
-        std::cout << "  Server Names: ";
-        for (const auto& name : server.server_names) {
-            std::cout << name << " ";
-        }
-        std::cout << std::endl;
-        std::cout << "  Root: " << server.root << std::endl;
-        std::cout << "  Error Pages:" << std::endl;
-        for (const auto& errorPage : server.error_pages) {
-            std::cout << "    " << errorPage.first << ": " << errorPage.second << std::endl;
-        }
-        if (server.client_max_body_size > 0) {
-            std::cout << "  Client Max Body Size: " << server.client_max_body_size << std::endl;
-        } else {
-            std::cout << "  Chunked Transfer: enabled" << std::endl;
-        }
-        std::cout << "  Default Server: " << (server.default_server ? "true" : "false") << std::endl;
+// Config ConfigParser::getServerConfig(std::string Host, bool isIp){
 
-        std::cout << "  Routes:" << std::endl;
+//     if (isIp)
+//     {
 
-        for (std::vector<Config::RouteConfig>::const_iterator routeIt = server.routes.begin(); 
-             routeIt != server.routes.end(); 
-             ++routeIt) {
-            const Config::RouteConfig& route = *routeIt;
-            std::cout << "  Route:" << std::endl;
-            std::cout << "    Path: " << route.path << std::endl;
-            std::cout << "    Root: " << route.root << std::endl;
-            std::cout << "    Accepted Methods: ";
-            for (const auto& method : route.accepted_methods) {
-                std::cout << method << " ";
-            }
-            std::cout << std::endl;
-            std::cout << "    Has Redirect: " << (route.has_redirect ? "true" : "false") << std::endl;
-            if (route.has_redirect) {
-                std::cout << "    Redirect Code: " << route.redirect_code << std::endl;
-                std::cout << "    Redirect URL: " << route.redirect_url << std::endl;
-            }
-            std::cout << "    Directory Listing: " << (route.directory_listing ? "true" : "false") << std::endl;
-            if (!route.index.empty()) {
-                std::cout << "    Index: " << route.index << std::endl;
-            }
-            if (route.cgi_enabled) {
-                std::cout << "    CGI Path: " << route.cgi_pass << std::endl;
-                std::cout << "    CGI Extensions: ";
-                for (const auto& ext : route.cgi_extensions) {
-                    std::cout << ext << " ";
-                }
-                std::cout << std::endl;
-            }
-            if (route.upload_enabled) {
-                std::cout << "    Upload Path: " << route.upload_path << std::endl;
-            }
-            if (server.client_max_body_size > 0) {
-                std::cout << "    Route Max Body Size: " << server.client_max_body_size << std::endl;
-            } else {
-                std::cout << "    Route Transfer: chunked" << std::endl;
-            }
-        }
-        
-        std::cout << std::endl;
-    }
-}
+//     }
+// }

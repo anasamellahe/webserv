@@ -1,149 +1,208 @@
 #include "monitorClient.hpp"
-#include "../HTTP/Request.hpp"
+#include "../Socket/socket.hpp"
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
-#include <sstream>
+#include <iostream>
+#include <fcntl.h>
 
-    // int socketAddres;
-    // std::vector<pollfd> fds;
 
-    monitorClient::monitorClient(std::vector<int> serverFDs)
-    {
-        //fill the fds vector withe the servers socket
-        pollfd serverPollFd;
-        for (size_t i = 0; i < serverFDs.size(); i++)
-        {
-            memset(&serverPollFd, 0, sizeof(serverPollFd));
-            std::cout << "socket add == [ " << serverFDs[i] << " ]\n";
-            serverPollFd.fd = serverFDs[i];
-            serverPollFd.events = POLLIN;
-            fds.push_back(serverPollFd);
-        }
-        this->numberOfServers = serverFDs.size();
-    }
-    void monitorClient::acceptNewClient(int serverFD)
-    {
-       
-        int clientFd = accept(serverFD, NULL, NULL);
-        if (clientFd == -1)
-            throw monitorexception("[ERROR] accept fail \n");
-        
-        // make the clientFD file descriptor non-block  
-        if (fcntl(clientFd, F_SETFL,  O_NONBLOCK) < 0)
-            throw monitorexception("[ERROR]: fcntl fail");
+#define CHUNK_SIZE 8192
 
-        //create a pollfd for the new client
-        pollfd serverPollFd;
+monitorClient::monitorClient(sock serverSockets) : ServerConfig(serverSockets.getConfig()) {
+
+    std::vector<int> serverFDs = serverSockets.getFDs();
+
+    pollfd serverPollFd;
+    for (size_t i = 0; i < serverFDs.size(); i++) {
         memset(&serverPollFd, 0, sizeof(serverPollFd));
-        serverPollFd.fd = clientFd; 
+        std::cout << "socket add == [ " << serverFDs[i] << " ]\n";
+        serverPollFd.fd = serverFDs[i];
         serverPollFd.events = POLLIN;
         fds.push_back(serverPollFd);
+    }
+    this->numberOfServers = serverFDs.size();
+}
 
-        // create a client tracker to track the request and response delivery 
+void monitorClient::acceptNewClient(int serverFD) {
+    int clientFd = accept(serverFD, NULL, NULL);
+    if (clientFd == -1) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return;
+        }
+        throw monitorexception("[ERROR] accept fail: " + std::string(strerror(errno)));
+    }
+    
+    if (clientFd < 0) {
+        std::cerr << "Invalid client file descriptor: " << clientFd << std::endl;
+        return;
+    }
+    
+    if (fcntl(clientFd, F_SETFL, O_NONBLOCK) < 0) {
+        close(clientFd);
+        throw monitorexception("[ERROR]: fcntl fail: " + std::string(strerror(errno)));
+    }
+
+    pollfd serverPollFd;
+    memset(&serverPollFd, 0, sizeof(serverPollFd));
+    serverPollFd.fd = clientFd; 
+    serverPollFd.events = POLLIN;
+    serverPollFd.revents = 0;
+    
+    try {
+        fds.push_back(serverPollFd);
         SocketTracker st;
-        this->fdsTracker.insert(std::pair<int, SocketTracker>(clientFd, st));
-        std::cout << serverFD << " accept new connection " << clientFd << "\n";
-    }
-    void monitorClient::removeClient(int index)
-    {
-        Viterator it  = fds.begin() + index;
-        close(it->fd);
-        this->fds.erase(it);
-        this->fdsTracker.erase(it->fd);
-    }
-
-
-    void monitorClient::startEventLoop() {
-        int ready = 0;
-        size_t lastProcessedClient = numberOfServers; // Track last processed client index
-        initializeTimeouts();
+        std::pair<TrackerIt, bool> result = this->fdsTracker.insert(
+            std::pair<int, SocketTracker>(clientFd, st)
+        );
         
-        while (1) {   
-            time_t now = time(NULL);
-            if (shouldCheckTimeouts(now)) {
-                checkTimeouts();
-                lastTimeoutCheck = now;
+        if (!result.second) {
+            std::cerr << "Warning: Client " << clientFd << " already exists in tracker" << std::endl;
+            fds.pop_back();
+            close(clientFd);
+            return;
+        }
+        
+        std::cout << "Server " << serverFD << " accepted new connection " << clientFd << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "Exception while adding client " << clientFd << ": " << e.what() << std::endl;
+        close(clientFd);
+        throw;
+    }
+}
+
+void monitorClient::removeClient(int index) {
+    if (index < 0 || index >= static_cast<int>(fds.size()) || index < static_cast<int>(numberOfServers)) {
+        std::cerr << "Invalid index " << index << " for removeClient (size: " << fds.size() << ", servers: " << numberOfServers << ")" << std::endl;
+        return;
+    }
+    
+    int clientFd = fds[index].fd;
+    close(clientFd);
+    fds.erase(fds.begin() + index);
+    fdsTracker.erase(clientFd);
+    
+    std::cout << "Client " << clientFd << " removed from index " << index << std::endl;
+}
+
+void monitorClient::startEventLoop() {
+    int ready = 0;
+    initializeTimeouts();
+    
+    while (1) {   
+        time_t now = time(NULL);
+        if (shouldCheckTimeouts(now)) {
+            checkTimeouts();
+            lastTimeoutCheck = now;
+        }
+        
+        ready = poll(fds.data(), fds.size(), 100);
+        if (ready == -1) {
+            if (errno == EINTR) continue;
+            throw monitorexception("[ERROR] poll fail: " + std::string(strerror(errno)));
+        }
+        
+        for (size_t i = 0; i < numberOfServers; i++) {
+            if (fds[i].revents & POLLIN) {
+                acceptNewClient(fds[i].fd);
             }
+        }
+        
+        for (int i = static_cast<int>(fds.size()) - 1; i >= static_cast<int>(numberOfServers); i--) {
+            if (i >= static_cast<int>(fds.size())) continue;
             
-            // Use poll with a short timeout to prevent blocking indefinitely
-            ready = poll(fds.data(), fds.size(), 100); // 100ms timeout
-            if (ready == -1) {
-                if (errno == EINTR) continue;
-                throw monitorexception("[ERROR] poll fail: " + std::string(strerror(errno)));
-            }
-            
-            // Process servers for new connections
-            for (size_t i = 0; i < numberOfServers; i++) {
-                if (fds[i].revents & POLLIN) {
-                    acceptNewClient(fds[i].fd);
-                }
-            }
-            
-            // Process clients in round-robin order
-            size_t clientCount = fds.size() - numberOfServers;
-            if (clientCount == 0) continue;
-            
-            // Start processing from the next client
-            size_t startIdx = (lastProcessedClient >= numberOfServers) 
-                              ? lastProcessedClient + 1 
-                              : numberOfServers;
-            
-            for (size_t i = 0; i < clientCount; i++) {
-                size_t currentIdx = (startIdx + i) % clientCount + numberOfServers;
-                if (currentIdx >= fds.size()) continue;
+            pollfd& currentFd = fds[i];
+            if (currentFd.revents & POLLIN) {
+                int keepAlive = readClientRequest(currentFd.fd);
+                updateClientActivity(currentFd.fd);
                 
-                pollfd& currentFd = fds[currentIdx];
-                if (currentFd.revents & POLLIN) {
-                    // Process only one chunk per iteration
-                    int keepAlive = readClientRequest(currentFd.fd);
-                    updateClientActivity(currentFd.fd);
-                    
-                    std::map<int, SocketTracker>::iterator it = fdsTracker.find(currentFd.fd);
-                    if (it != fdsTracker.end() && !it->second.response.empty()) {
-                        currentFd.events |= POLLOUT;
-                    }
-                    
-                    if (keepAlive == 0) {
-                        removeClient(currentIdx);
-                        clientCount--; // Adjust count after removal
-                        i--; // Adjust loop index
-                    }
+                std::map<int, SocketTracker>::iterator it = fdsTracker.find(currentFd.fd);
+                if (it != fdsTracker.end() && !it->second.response.empty()) {
+                    currentFd.events |= POLLOUT;
                 }
                 
-                // Update last processed index
-                lastProcessedClient = currentIdx;
+                if (keepAlive == 0) {
+                    removeClient(i);
+                }
             }
         }
     }
+}
 
-    monitorClient::~monitorClient()
-    {
-        std::cout << "close all fds \n";
-        for (Viterator it = fds.begin(); it != fds.end(); it++)
-        {
-            if (it->fd > 0)
-                close(it->fd);
+monitorClient::~monitorClient() {
+    std::cout << "close all fds \n";
+    for (PollFdsIt it = fds.begin(); it != fds.end(); it++) {
+        if (it->fd > 0)
+            close(it->fd);
+    }
+}
+
+monitorClient::monitorexception::monitorexception(std::string msg) {
+    this->ErrorMsg = msg;
+}
+
+const char *monitorClient::monitorexception::what() const throw() {
+    return ErrorMsg.c_str();
+}
+
+monitorClient::monitorexception::~monitorexception() throw() {}
+
+monitorClient::SocketTracker::SocketTracker() 
+    : WError(0), RError(0), lastActive(time(NULL)) {
+    raw_buffer = "";
+    response = "";
+    error = "";
+}
+
+
+bool monitorClient::shouldCheckTimeouts(time_t currentTime) {
+    return (currentTime - lastTimeoutCheck >= TIMEOUT_CHECK_INTERVAL);
+}
+
+void monitorClient::SocketTracker::updateActivity() {
+    lastActive = time(NULL);
+}
+
+bool monitorClient::SocketTracker::hasTimedOut(time_t currentTime, time_t timeoutSeconds) const {
+    return (currentTime - lastActive) > timeoutSeconds;
+}
+
+void monitorClient::checkTimeouts() {
+    std::cout << "Checking for timed out clients..." << std::endl;
+    time_t now = time(NULL);
+    
+    for (size_t i = numberOfServers; i < fds.size(); i++) {
+        int clientFd = fds[i].fd;
+        TrackerIt it = fdsTracker.find(clientFd);
+
+        if (it != fdsTracker.end() && it->second.hasTimedOut(now, CLIENT_TIMEOUT)) {
+            std::cout << "Client " << clientFd << " timed out after " 
+                      << (now - it->second.lastActive) << " seconds" << std::endl;
+            
+            it->second.RError = 408;
+            it->second.WError = 1;
+            std::string timeoutHtml = "<html><body><h1>408 Request Timeout</h1>"
+                                     "<p>The server timed out waiting for the Request.</p></body></html>";
+            it->second.response = "HTTP/1.1 408 Request Timeout\r\n";
+            it->second.response += "Connection: close\r\n";
+            it->second.response += "Content-Type: text/html\r\n";
+            it->second.response += "Content-Length: " + std::to_string(timeoutHtml.length()) + "\r\n\r\n";
+            it->second.response += timeoutHtml;
+            fds[i].events = POLLOUT;
         }
     }
+    lastTimeoutCheck = now;
+}
 
-    monitorClient::monitorexception::monitorexception(std::string msg)
-    {
-        this->ErrorMsg = msg;
+void monitorClient::initializeTimeouts() {
+    lastTimeoutCheck = time(NULL);
+}
+
+void monitorClient::updateClientActivity(int clientFd) {
+    TrackerIt it = fdsTracker.find(clientFd);
+    if (it != fdsTracker.end()) {
+        it->second.updateActivity();
     }
-    const char *monitorClient::monitorexception::what () const throw()
-    {
-        return ErrorMsg.c_str();
-    }
+}
 
 
-    monitorClient::monitorexception::~monitorexception() throw()
-    {}
-
-    // SocketTracker* monitorClient::getSocketTracker(int socketFd)
-    // {
-    //     CMiterator it = this->fdsTracker.find(socketFd);
-    //     if (it != this->fdsTracker.end())
-    //         return &it->second;
-    //     return NULL;
-    // }
