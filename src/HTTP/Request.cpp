@@ -215,15 +215,18 @@ bool Request::parseHeaders(const std::string& headers_text) {
         throw 1;
     }
 
-    if (key == "host" && value.empty()) {
-        if (this->error_code.empty())
-            this->error_code = BAD_REQ;
-        throw 1;
+    if (key == "host") {
+        if (value.empty() || !isValidHost(value)) {
+            if (this->error_code.empty())
+                this->error_code = BAD_REQ;
+            throw 1;
+        }
+        this->Host = value;
     }
-    
     this->headers.insert(std::pair<std::string, std::string>(key, value));
     return true;
 }
+
 
 const std::string& Request::getMethod() const {
     return this->method;
@@ -334,21 +337,31 @@ const std::map<std::string, std::string>& Request::getQueryParams() const {
 bool Request::isValidHost(const std::string& Host) {
     size_t pos = Host.find_first_not_of("0123456789.:");
     int num1, num2, num3, num4, num5, consumed;
+    num5 = -1;
     
     if (pos == std::string::npos) {
-        if (sscanf(Host.c_str(), "%d.%d.%d.%d:%d%n",  &num1, &num2, &num3, &num4, &num5, &consumed) == 5) {
-            if ((num1 >= 0 && num1 <= 255) &&
-                (num2 >= 0 && num2 <= 255) &&
-                (num3 >= 0 && num3 <= 255) &&
-                (num4 >= 0 && num4 <= 255) &&
-                (num5 >= 0 && num5 <= 65535) &&
-                (static_cast<size_t>(consumed) == Host.length())) {
+        int result = sscanf(Host.c_str(), "%d.%d.%d.%d:%d%n", &num1, &num2, &num3, &num4, &num5, &consumed);
+        
+        if ((num1 >= 0 && num1 <= 255) &&
+            (num2 >= 0 && num2 <= 255) &&
+            (num3 >= 0 && num3 <= 255) &&
+            (num4 >= 0 && num4 <= 255) &&
+            (static_cast<size_t>(consumed) == Host.length())) {
+            
+            if (result == 5) {
+                if (num5 >= 1 && num5 <= 65535) {
+                    this->isIp = true;
+                    this->Port = num5;
+                    return true;
+                }
+                return false;
+            } else if (result == 4) {
                 this->isIp = true;
+                this->Port = 80;
                 return true;
             }
-            else
-                this->isIp = false;
         }
+        return false;
     }
     
     for (size_t i = 0; i < Host.length(); i++) {

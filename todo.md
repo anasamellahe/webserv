@@ -9,6 +9,7 @@ Tasks I need to do: Anas
 - ⏲ Create a method to get the server config from the config parser and store it on the request object
 - ⏲ Make each request have its own server configuration and routes
 - ⏲ Complete the GET method and make it function
+- ⏲complete the isValidHost function to check for port in the host is a server name (domain name) 
 
 Tasks I need to do: Sami
 - ❌Complete the reading from the client and set the request completed boolean
