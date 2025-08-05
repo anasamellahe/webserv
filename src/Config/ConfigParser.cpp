@@ -408,6 +408,14 @@ int ConfigParser::parseConfigFile(const std::string& filename) {
     return 0;
 }
 
-const Config ConfigParser::getConfig() {
+const Config ConfigParser::getConfigs() {
     return this->config;
 }
+
+// Config ConfigParser::getServerConfig(std::string Host, bool isIp){
+
+//     if (isIp)
+//     {
+
+//     }
+// }

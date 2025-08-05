@@ -1,13 +1,18 @@
 #include "monitorClient.hpp"
+#include "../Socket/socket.hpp"
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
 #include <iostream>
 #include <fcntl.h>
 
+
 #define CHUNK_SIZE 8192
 
-monitorClient::monitorClient(std::vector<int> serverFDs) {
+monitorClient::monitorClient(sock serverSockets) : ServerConfig(serverSockets.getConfig()) {
+
+    std::vector<int> serverFDs = serverSockets.getFDs();
+
     pollfd serverPollFd;
     for (size_t i = 0; i < serverFDs.size(); i++) {
         memset(&serverPollFd, 0, sizeof(serverPollFd));

@@ -15,7 +15,8 @@ const char* sock::sockException::what() const throw() {
 
 sock::sockException::~sockException() throw() {}
 
-sock::sock(std::vector<std::pair<std::string, int> > hosts) : hosts(hosts) {
+sock::sock(ConfigParser config_parser) : config_parser(config_parser) {
+    hosts = config_parser.getServerListenAddresses();
     int fd, op;
     for (size_t i = 0; i < hosts.size(); i++) {
         fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
@@ -48,7 +49,10 @@ void sock::bindINET() {
 std::vector<int> sock::getFDs() const {
     return this->sockFDs;
 }
-
+ConfigParser sock::getConfig()
+{
+    return this->config_parser;
+}
 void sock::closeFDs(const char *msg) {
     for (size_t i = 0; i < this->sockFDs.size(); i++)
         close(sockFDs[i]);

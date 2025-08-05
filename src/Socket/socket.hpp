@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Config/ConfigParser.hpp" 
 #include <vector>
 #include <string>
 #include <utility>
@@ -16,16 +17,17 @@ struct testSocketData;
  */
 class sock {
 private:
+    ConfigParser config_parser; // object of the parsed config file
     std::vector<int> sockFDs;                           // Server socket file descriptors
     std::vector<std::pair<std::string, int> > hosts;    // Host:port combinations
 
 public:
-    /**
+       /**
      * @brief Constructor - creates sockets for specified host:port pairs
-     * @param hosts Vector of host:port pairs to bind to
+     * @param config_parser Copy of the ConfigParser class that holds all the data needed to create the server sockets
      * Creates non-blocking TCP sockets with SO_REUSEADDR option
      */
-    sock(std::vector<std::pair<std::string, int> > hosts);
+    sock(ConfigParser config_parser); //change this constructor to accept a object insted of vector of hosts 
 
     /**
      * @brief Binds sockets to their respective addresses and starts listening
@@ -33,6 +35,7 @@ public:
      * with a backlog of 100 connections
      */
     void bindINET();
+    ConfigParser getConfig();
 
     /**
      * @brief Closes all socket file descriptors and throws exception

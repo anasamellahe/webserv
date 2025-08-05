@@ -35,7 +35,7 @@ int monitorClient::readClientRequest(int clientFd) {
     if (tracker.request_obj.getClientFD() != clientFd) {
         tracker.request_obj.setClientFD(clientFd);
     }
-    
+ 
     std::string buffer;
     int readResult = readChunkFromClient(clientFd, buffer);
     

@@ -1,5 +1,14 @@
-webserve : 
-create a vector that hold all cliend req and track them ;
-check if we read from request or readclient func doesnt work ;
-print all what we extract from request  (query , headers , body);
-round robbin apprroach finctionalitiy ;
+
+
+Tasks I already completed:
+- ✅ Make the code more clean by adding descriptions to the classes and methods
+- ✅ Change the sock constructor to accept a config object and add a new attribute to store the object in the socket class
+- ✅ Change the monitorClient class constructor to accept a socket object then extract the data needed from it and add a new attribute to store the configuration object
+
+Tasks I need to do: Anas
+- ⏲ Create a method to get the server config from the config parser and store it on the request object
+- ⏲ Make each request have its own server configuration and routes
+- ⏲ Complete the GET method and make it function
+
+Tasks I need to do: Sami
+- ❌Complete the reading from the client and set the request completed boolean

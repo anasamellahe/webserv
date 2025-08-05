@@ -6,9 +6,9 @@
 #include <time.h>
 #include "../HTTP/Common.hpp"
 #include "../HTTP/Request.hpp"
+#include "../Config/ConfigParser.hpp"
 
 class sock;
-
 /**
  * @brief Client connection monitor and event handler class
  * 
@@ -60,9 +60,11 @@ public:
     typedef std::map<int, SocketTracker>::const_iterator CTrackerIt;
 
 private:
+    ConfigParser ServerConfig;                  // add a object copy  of the parsed config file 
     std::vector<pollfd> fds;                    // Poll file descriptors array
     size_t numberOfServers;                     // Number of server sockets
     std::map<int, SocketTracker> fdsTracker;    // Connection tracking map
+
 
     // Timeout and chunk size constants
     static const time_t CLIENT_TIMEOUT = 60;           // Client timeout (60 seconds)
@@ -186,10 +188,10 @@ public:
 
     /**
      * @brief Constructor - initializes monitor with server sockets
-     * @param serverFDs Vector of server socket file descriptors
+     * @param serverSockets Copy of the socket class that holds the file descriptors and parsed configuration data
      * Sets up poll structures for all server sockets
      */
-    monitorClient(std::vector<int> serverFDs);
+    monitorClient(sock serverSockets); //make the constructor accept a sock  class 
 
     /**
      * @brief Main event loop - monitors all connections and handles events

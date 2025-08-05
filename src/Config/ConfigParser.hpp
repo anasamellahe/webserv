@@ -11,6 +11,7 @@
 #include <cctype>
 #include <climits>
 
+
 /**
  * @brief Configuration structure containing all server and route settings
  * 
@@ -184,7 +185,15 @@ public:
      * @brief Gets the complete parsed configuration
      * @return Const reference to parsed configuration structure
      */
-    const Config getConfig();
+    const Config getConfigs();
+
+    /**
+     * @brief Gets the server configuration using the host
+     * @param Host The host for the server we are looking for
+     * @param isIp Boolean that indicates whether the host is an IP or a server name 
+     * @return Returns a struct containing the server config
+     */
+    Config getServerConfig(std::string Host, bool isIp);
 };
 
 #endif

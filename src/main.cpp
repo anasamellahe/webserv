@@ -95,12 +95,15 @@ int main(int argc, char** argv) {
         int parse_config = config_parser.parseConfigFile(config_file);
         if (parse_config == 0) {
             config_parser.initializeServerListenAddresses();
-            printConfig(config_parser.getConfig());
-    
-            sock socketCreate(config_parser.getServerListenAddresses());
+            printConfig(config_parser.getConfigs());
+            
+
+            // make sock constructor  accept a object of the config parser  class 
+            sock socketCreate(config_parser);
+
             std::cout << "Sockets created successfully" << std::endl;
             
-            monitorClient mc(socketCreate.getFDs());
+            monitorClient mc(socketCreate);
             std::cout << "Starting event loop..." << std::endl;
             mc.startEventLoop();
         } else {
