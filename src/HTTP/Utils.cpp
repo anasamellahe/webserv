@@ -1,5 +1,5 @@
 #include "Utils.hpp"
-#include <cctype>
+
 
 std::string stringToLower(std::string& str)
 {
@@ -8,23 +8,29 @@ std::string stringToLower(std::string& str)
     return str;
 }
 
-bool keyValidationNot(const std::string &key)
+
+bool isValidKey(const std::string &key)
 {
     if (key.empty())
-        return true;
+        return false;
     for (size_t i = 0; i < key.size(); i++)
     {
         if (!isprint(key[i]) || key[i] == ' ')
-            return true;
+            return false;
     }
-    return false;
+    return true;
 }
-bool valueValidationNot(const std::string &value)
+
+bool isValidValue(const std::string &value)
 {
     for (size_t i = 0; i < value.size(); i++)
     {
         if (!isprint(value[i]))
-            return true;
+            return false;
     }
-    return false;
+    return true;
+}
+
+bool isValidPort(int port){
+    return port >= 1 && port <= 65535;
 }

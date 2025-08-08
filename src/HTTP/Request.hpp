@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cctype>
+#include <typeinfo>  
 #include <vector>
 #include <map>
 #include <string>
@@ -7,7 +9,6 @@
 #include <sstream>
 #include <cstdlib>
 #include <cstring>
-#include <cctype>
 #include <stdexcept>
 #include <algorithm>
 #include <cstddef>
@@ -82,11 +83,37 @@ class Request
         bool parseHeaders(const std::string& headers_text);
 
         /**
+         * @brief Validates if a string is a valid IPv4 address
+         * @param hostValue Reference to potential IP address string (may include port)
+         * @return true if valid IP address format, false otherwise
+         * 
+         * Checks if the string is a properly formatted IPv4 address with optional port.
+         * Valid formats include "192.168.1.1" or "192.168.1.1:8080".
+         * If valid, sets isIp=true, updates Port (default 80 if not specified),
+         * and may modify hostValue to remove port component.
+         */
+        bool isValidIpAddress(std::string& hostValue);
+
+        /**
+         * @brief Validates if a string is a valid domain name
+         * @param hostValue Reference to potential domain name string (may include port)
+         * @return true if valid domain name format, false otherwise
+         * 
+         * Checks if the string follows proper domain name formatting rules.
+         * Validates character set (alphanumeric, dots, hyphens) and structure.
+         * Handles domains with optional port (e.g., "example.com:8080").
+         * If valid, sets isIp=false, updates Port (default 80 if not specified),
+         * and may modify hostValue to remove port component.
+         */
+        bool isValidDomainName(std::string& hostValue);
+
+
+        /**
          * @brief Validates if the provided host is in correct format
          * @param Host The host string to validate (IP:port or domain:port)
          * @return true if host format is valid, false otherwise
          */
-        bool isValidHost(const std::string& Host);
+        bool isValidHost(std::string& Host);
 
         /**
          * @brief Parses query string parameters from URL
@@ -188,6 +215,26 @@ class Request
          */
         bool parseFromSocket(int clientFd, const std::string& buffer, size_t bufferSize);
 
+
+        /**
+         * @brief Sets the host value from the Host header
+         * @param host Host string (domain name or IP address)
+         * 
+         * Updates the internal Host member variable used for routing 
+         * and virtual host selection. The host parameter should be 
+         * pre-validated before calling this method.
+         */
+        void setHost(const std::string& host);
+
+        /**
+         * @brief Sets the port number from the Host header
+         * @param port Port number (1-65535)
+         * 
+         * Updates the internal Port member variable used for server routing.
+         * If the provided port is invalid (outside 1-65535 range), defaults to port 80.
+         * Uses the isValidPort template function for validation.
+         */
+        void setPort(int port);
 
         /**
          * @brief Sets the HTTP method after validation
@@ -386,5 +433,5 @@ class Request
          * @return Matching server configuration
          */
         Config getserverConfig(std::string serverToFind, const Config& serversConfigs); //   host or serverName
-
+    
 };

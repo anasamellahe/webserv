@@ -188,44 +188,7 @@ void Request::parseStartLine(const std::string& line) {
     }
 }
 
-bool Request::parseHeaders(const std::string& headers_text) {
-    
-    std::string key, value;
-    size_t pos = headers_text.find(":", 0);
-    
-    if (pos == std::string::npos) {
-        this->error_code = BAD_REQ;
-        throw 1;
-    }
-    
-    key = headers_text.substr(0, pos);
-    stringToLower(key);
-    
-    size_t valueStartIndex = headers_text.find_first_not_of(": \r\t\v\f", pos);
-    if (valueStartIndex == std::string::npos) {
-        valueStartIndex = pos;
-    }
-    
-    value = headers_text.substr(valueStartIndex, headers_text.rfind("\r\n") - valueStartIndex);
-    stringToLower(value);
-    
-    if (keyValidationNot(key) || valueValidationNot(value)) {
-        if (this->error_code.empty())
-            this->error_code = BAD_REQ;
-        throw 1;
-    }
 
-    if (key == "host") {
-        if (value.empty() || !isValidHost(value)) {
-            if (this->error_code.empty())
-                this->error_code = BAD_REQ;
-            throw 1;
-        }
-        this->Host = value;
-    }
-    this->headers.insert(std::pair<std::string, std::string>(key, value));
-    return true;
-}
 
 
 const std::string& Request::getMethod() const {
@@ -261,6 +224,8 @@ sockaddr_in Request::getClientAddr() const {
     inet_ntop(AF_INET, &(this->client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
     return this->client_addr;
 }
+
+
 
 void Request::setHeader(const std::string& key, const std::string& value) {
     if (!key.empty() && !value.empty())
@@ -334,49 +299,144 @@ const std::map<std::string, std::string>& Request::getQueryParams() const {
     return this->query_params;
 }
 
-bool Request::isValidHost(const std::string& Host) {
-    size_t pos = Host.find_first_not_of("0123456789.:");
-    int num1, num2, num3, num4, num5, consumed;
-    num5 = -1;
+
+
+void Request::setHost(const std::string& host) {
+    this->Host = host;
+}
+
+
+void Request::setPort(int port) {
+    if (isValidPort(port)) {
+        this->Port = port;
+    } else {
+        this->Port = 80; // Default to 80 if invalid
+    }
+}
+
+
+
+bool Request::isValidIpAddress(std::string& hostValue) {
+    int octet1, octet2, octet3, octet4, portValue, consumed;
+    portValue = -1;
     
-    if (pos == std::string::npos) {
-        int result = sscanf(Host.c_str(), "%d.%d.%d.%d:%d%n", &num1, &num2, &num3, &num4, &num5, &consumed);
+    int result = sscanf(hostValue.c_str(), "%d.%d.%d.%d:%d%n", 
+                        &octet1, &octet2, &octet3, &octet4, &portValue, &consumed);
+    
+    if ((octet1 >= 0 && octet1 <= 255) &&
+        (octet2 >= 0 && octet2 <= 255) &&
+        (octet3 >= 0 && octet3 <= 255) &&
+        (octet4 >= 0 && octet4 <= 255) &&
+        (static_cast<size_t>(consumed) == hostValue.length())) {
         
-        if ((num1 >= 0 && num1 <= 255) &&
-            (num2 >= 0 && num2 <= 255) &&
-            (num3 >= 0 && num3 <= 255) &&
-            (num4 >= 0 && num4 <= 255) &&
-            (static_cast<size_t>(consumed) == Host.length())) {
-            
-            if (result == 5) {
-                if (num5 >= 1 && num5 <= 65535) {
-                    this->isIp = true;
-                    this->Port = num5;
-                    return true;
-                }
-                return false;
-            } else if (result == 4) {
+
+        if (result == 5) {
+            if (isValidPort(portValue)) {
+                this->Port = portValue;
+                hostValue = hostValue.substr(0, hostValue.find(':'));
+                setHost(hostValue);
                 this->isIp = true;
-                this->Port = 80;
                 return true;
             }
+            return false;
+        } 
+        else if (result == 4) {
+            setHost(hostValue);
+            this->Port = 80; 
+            this->isIp = true;
+            return true;
         }
-        return false;
+    }
+    return false;
+}
+
+bool Request::isValidDomainName(std::string& hostValue) {
+    for (size_t i = 0; i < hostValue.length(); i++) {
+        if (!isalnum(hostValue[i]) && hostValue[i] != '.' && hostValue[i] != '-' && hostValue[i] != ':')
+            return false;
+        if (i == 0 && (hostValue[i] == '.' || hostValue[i] == '-' || hostValue[i] == ':'))
+            return false;
     }
     
-    for (size_t i = 0; i < Host.length(); i++) {
-        if (!isalnum(Host[i]) && Host[i] != '.' && Host[i] != '-' && Host[i] != ':')
+    size_t colonPos = hostValue.find(':');
+    if (colonPos != std::string::npos) {
+        std::string portPart = hostValue.substr(colonPos + 1);
+        try {
+            for (size_t i = 0; i < portPart.length(); i++) {
+                if (!isdigit(portPart[i]))
+                    return false;
+            }
+            int port = std::stoi(portPart);
+            if (isValidPort(port)) {
+                this->Port = port;
+                hostValue = hostValue.substr(0, colonPos);
+                setHost(hostValue);
+            } else {
+                return false;
+            }
+        } catch (...) {
             return false;
-        if (i == 0 && (Host[i] == '.' || Host[i] == '-' || Host[i] == ':'))
-            return false;
+        }
+    } else {
+        setHost(hostValue);
+        this->Port = -1;
     }
+    
     this->isIp = false;
     return true;
 }
 
-bool Request::validateHost(const std::string& Host) {
-    this->Host = Host;
-    this->Port = 8080;
+bool Request::isValidHost(std::string& Host) {
+    size_t pos = Host.find_first_not_of("0123456789.:");
+    
+    if (pos == std::string::npos) {
+        return isValidIpAddress(Host);
+    }
+    
+    return isValidDomainName(Host);
+}
+
+bool Request::parseHeaders(const std::string& headers_text) {
+    std::string key, value;
+    size_t pos = headers_text.find(":", 0);
+    
+    if (pos == std::string::npos) {
+        this->error_code = BAD_REQ;
+        throw 1;
+    }
+    
+    key = headers_text.substr(0, pos);
+    stringToLower(key);
+    
+    size_t valueStartIndex = headers_text.find_first_not_of(": \r\t\v\f", pos);
+    if (valueStartIndex == std::string::npos) {
+        valueStartIndex = pos;
+    }
+    
+    value = headers_text.substr(valueStartIndex, headers_text.rfind("\r\n") - valueStartIndex);
+    stringToLower(value);
+    if (!isValidKey(key) || !isValidValue(value)){
+        if (this->error_code.empty())
+            this->error_code = BAD_REQ;
+        throw 1;
+    }
+
+    if (key == "host") {
+        if (value.empty()) {
+            if (this->error_code.empty())
+                this->error_code = BAD_REQ;
+            throw 1;
+        }
+        
+        std::string hostCopy = value;
+        if (!isValidHost(hostCopy)) {
+            if (this->error_code.empty())
+                this->error_code = BAD_REQ;
+            throw 1;
+        }
+    }
+    
+    this->headers.insert(std::pair<std::string, std::string>(key, value));
     return true;
 }
 
