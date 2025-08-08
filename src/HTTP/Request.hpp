@@ -146,10 +146,39 @@ class Request
 
         /**
          * @brief Parses multipart form data with specified boundary
+         * @param body_data Raw multipart body data
          * @param boundary Multipart boundary string
          * @return true if parsing successful, false otherwise
          */
-        bool parseMultipartBody(const std::string& boundary);
+        bool parseMultipartBody(const std::string& body_data, const std::string& boundary);
+
+        /**
+         * @brief Parses individual multipart section
+         * @param part_data Raw part data including headers and body
+         * @return true if parsing successful, false otherwise
+         */
+        bool parseMultipartPart(const std::string& part_data);
+
+        /**
+         * @brief Parses URL-encoded form data
+         * @param form_data Raw form data string
+         * @return true if parsing successful, false otherwise
+         */
+        bool parseFormData(const std::string& form_data);
+
+        /**
+         * @brief URL decodes a string (converts %XX to actual characters)
+         * @param str URL-encoded string
+         * @return Decoded string
+         */
+        std::string urlDecode(const std::string& str);
+
+        /**
+         * @brief URL encodes a string (converts special chars to %XX)
+         * @param str Raw string to encode
+         * @return URL-encoded string
+         */
+        std::string urlEncode(const std::string& str);
 
         /**
          * @brief Parses chunked transfer encoding data

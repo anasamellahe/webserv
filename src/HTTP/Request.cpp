@@ -188,9 +188,6 @@ void Request::parseStartLine(const std::string& line) {
     }
 }
 
-
-
-
 const std::string& Request::getMethod() const {
     return this->method;
 }
@@ -224,8 +221,6 @@ sockaddr_in Request::getClientAddr() const {
     inet_ntop(AF_INET, &(this->client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
     return this->client_addr;
 }
-
-
 
 void Request::setHeader(const std::string& key, const std::string& value) {
     if (!key.empty() && !value.empty())
@@ -262,9 +257,13 @@ void Request::addQueryParam(const std::string& key, const std::string& value) {
 
 void Request::parseQueryPair(const std::string &query, size_t start, size_t end) {
     size_t pos = query.find("=", start);
-    if (pos != std::string::npos || pos <= end) {
+    if (pos != std::string::npos && pos <= end) {
         std::string key = query.substr(start, pos - start);
-        std::string value = query.substr(pos + 1, end - pos);
+        std::string value = query.substr(pos + 1, end - pos - 1);
+        
+        key = urlDecode(key);
+        value = urlDecode(value);
+        
         addQueryParam(key, value);
     }
 }
@@ -299,22 +298,17 @@ const std::map<std::string, std::string>& Request::getQueryParams() const {
     return this->query_params;
 }
 
-
-
 void Request::setHost(const std::string& host) {
     this->Host = host;
 }
-
 
 void Request::setPort(int port) {
     if (isValidPort(port)) {
         this->Port = port;
     } else {
-        this->Port = 80; // Default to 80 if invalid
+        this->Port = 80;
     }
 }
-
-
 
 bool Request::isValidIpAddress(std::string& hostValue) {
     int octet1, octet2, octet3, octet4, portValue, consumed;
@@ -501,7 +495,26 @@ void Request::addUpload(const std::string& key, const FilePart& file_part) {
 }
 
 bool Request::parseBody(const std::string& body_data) {
-    (void)body_data;
+    ConstHeaderIterator cl_it = this->headers.find("content-length");
+    if (cl_it != this->headers.cend()) {
+        try {
+            size_t expected_length = std::stoul(cl_it->second);
+            if (body_data.length() != expected_length) {
+                if (body_data.length() < expected_length) {
+                    return false;
+                }
+                this->error_code = BAD_REQ;
+                return false;
+            }
+        } catch (const std::exception&) {
+            this->error_code = BAD_REQ;
+            return false;
+        }
+    }
+    
+    if (body_data.empty()) {
+        return true;
+    }
     
     ConstHeaderIterator it = this->headers.find("content-type");
     if (it != this->headers.cend()) {
@@ -510,8 +523,13 @@ bool Request::parseBody(const std::string& body_data) {
             size_t boundary_pos = content_type.find("boundary=");
             if (boundary_pos != std::string::npos) {
                 std::string boundary = content_type.substr(boundary_pos + 9);
-                return parseMultipartBody(boundary);
+                if (!boundary.empty() && boundary[0] == '"' && boundary.back() == '"') {
+                    boundary = boundary.substr(1, boundary.length() - 2);
+                }
+                return parseMultipartBody(body_data, boundary);
             }
+        } else if (content_type.find("application/x-www-form-urlencoded") != std::string::npos) {
+            parseFormData(body_data);
         }
     }
     
@@ -519,14 +537,260 @@ bool Request::parseBody(const std::string& body_data) {
     return true;
 }
 
-bool Request::parseMultipartBody(const std::string& boundary) {
-    (void)boundary;
+bool Request::parseMultipartBody(const std::string& body_data, const std::string& boundary) {
+    if (boundary.empty() || body_data.empty()) {
+        return false;
+    }
+    
+    std::string delimiter = "--" + boundary;
+    std::string end_delimiter = delimiter + "--";
+    
+    size_t pos = 0;
+    size_t start_pos = body_data.find(delimiter, pos);
+    
+    while (start_pos != std::string::npos) {
+        start_pos += delimiter.length();
+        
+        if (start_pos + 1 < body_data.length() && 
+            body_data[start_pos] == '\r' && body_data[start_pos + 1] == '\n') {
+            start_pos += 2;
+        }
+        
+        size_t end_pos = body_data.find(delimiter, start_pos);
+        if (end_pos == std::string::npos) {
+            break;
+        }
+        
+        std::string part_data = body_data.substr(start_pos, end_pos - start_pos);
+        
+        if (part_data.length() >= 2 && 
+            part_data.substr(part_data.length() - 2) == "\r\n") {
+            part_data = part_data.substr(0, part_data.length() - 2);
+        }
+        
+        parseMultipartPart(part_data);
+        
+        pos = end_pos;
+        start_pos = body_data.find(delimiter, pos);
+        
+        if (start_pos != std::string::npos) {
+            size_t check_end = start_pos + delimiter.length();
+            if (check_end + 1 < body_data.length() && 
+                body_data.substr(check_end, 2) == "--") {
+                break;
+            }
+        }
+    }
+    
     return true;
 }
 
+bool Request::parseMultipartPart(const std::string& part_data) {
+    size_t headers_end = part_data.find("\r\n\r\n");
+    if (headers_end == std::string::npos) {
+        return false;
+    }
+    
+    std::string headers_section = part_data.substr(0, headers_end);
+    std::string body_section = part_data.substr(headers_end + 4);
+    
+    std::map<std::string, std::string> part_headers;
+    std::stringstream ss(headers_section);
+    std::string line;
+    
+    while (std::getline(ss, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        
+        size_t colon_pos = line.find(':');
+        if (colon_pos != std::string::npos) {
+            std::string key = line.substr(0, colon_pos);
+            std::string value = line.substr(colon_pos + 1);
+            
+            key.erase(0, key.find_first_not_of(" \t"));
+            key.erase(key.find_last_not_of(" \t") + 1);
+            value.erase(0, value.find_first_not_of(" \t"));
+            value.erase(value.find_last_not_of(" \t") + 1);
+            
+            stringToLower(key);
+            part_headers[key] = value;
+        }
+    }
+    
+    auto cd_it = part_headers.find("content-disposition");
+    if (cd_it != part_headers.end()) {
+        std::string disposition = cd_it->second;
+        std::string name, filename;
+        
+        size_t name_pos = disposition.find("name=\"");
+        if (name_pos != std::string::npos) {
+            name_pos += 6;
+            size_t name_end = disposition.find("\"", name_pos);
+            if (name_end != std::string::npos) {
+                name = disposition.substr(name_pos, name_end - name_pos);
+            }
+        }
+        
+        size_t filename_pos = disposition.find("filename=\"");
+        if (filename_pos != std::string::npos) {
+            filename_pos += 10;
+            size_t filename_end = disposition.find("\"", filename_pos);
+            if (filename_end != std::string::npos) {
+                filename = disposition.substr(filename_pos, filename_end - filename_pos);
+            }
+        }
+        
+        if (!name.empty()) {
+            if (!filename.empty()) {
+                FilePart file_part;
+                file_part.filename = filename;
+                file_part.content = body_section;
+                
+                auto ct_it = part_headers.find("content-type");
+                if (ct_it != part_headers.end()) {
+                    file_part.content_type = ct_it->second;
+                }
+                
+                addUpload(name, file_part);
+            } else {
+                addQueryParam(name, body_section);
+            }
+        }
+    }
+    
+    return true;
+}
+
+bool Request::parseFormData(const std::string& form_data) {
+    size_t start = 0;
+    size_t pos = 0;
+    
+    while (start < form_data.length()) {
+        pos = form_data.find('&', start);
+        if (pos == std::string::npos) {
+            pos = form_data.length();
+        }
+        
+        std::string pair = form_data.substr(start, pos - start);
+        size_t equals_pos = pair.find('=');
+        
+        if (equals_pos != std::string::npos) {
+            std::string key = pair.substr(0, equals_pos);
+            std::string value = pair.substr(equals_pos + 1);
+            
+            key = urlDecode(key);
+            value = urlDecode(value);
+            
+            addQueryParam(key, value);
+        }
+        
+        start = pos + 1;
+    }
+    
+    return true;
+}
+
+std::string Request::urlDecode(const std::string& str) {
+    std::string decoded;
+    for (size_t i = 0; i < str.length(); ++i) {
+        if (str[i] == '%' && i + 2 < str.length()) {
+            char hex1 = str[i + 1];
+            char hex2 = str[i + 2];
+            
+            if (std::isxdigit(hex1) && std::isxdigit(hex2)) {
+                int value = 0;
+                if (hex1 >= '0' && hex1 <= '9') value += (hex1 - '0') * 16;
+                else if (hex1 >= 'A' && hex1 <= 'F') value += (hex1 - 'A' + 10) * 16;
+                else if (hex1 >= 'a' && hex1 <= 'f') value += (hex1 - 'a' + 10) * 16;
+                
+                if (hex2 >= '0' && hex2 <= '9') value += (hex2 - '0');
+                else if (hex2 >= 'A' && hex2 <= 'F') value += (hex2 - 'A' + 10);
+                else if (hex2 >= 'a' && hex2 <= 'f') value += (hex2 - 'a' + 10);
+                
+                decoded += static_cast<char>(value);
+                i += 2;
+            } else {
+                decoded += str[i];
+            }
+        } else if (str[i] == '+') {
+            decoded += ' ';
+        } else {
+            decoded += str[i];
+        }
+    }
+    return decoded;
+}
+
+std::string Request::urlEncode(const std::string& str) {
+    std::string encoded;
+    for (size_t i = 0; i < str.length(); ++i) {
+        char c = str[i];
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            encoded += c;
+        } else {
+            encoded += '%';
+            char hex1 = (c >> 4) & 0xF;
+            char hex2 = c & 0xF;
+            encoded += (hex1 < 10) ? ('0' + hex1) : ('A' + hex1 - 10);
+            encoded += (hex2 < 10) ? ('0' + hex2) : ('A' + hex2 - 10);
+        }
+    }
+    return encoded;
+}
+
 bool Request::parseChunkedTransfer(const std::string& chunked_data) {
-    (void)chunked_data;
+    if (chunked_data.empty()) {
+        return true;
+    }
+    
     this->is_chunked = true;
+    size_t pos = 0;
+    
+    while (pos < chunked_data.length()) {
+        size_t crlf_pos = chunked_data.find("\r\n", pos);
+        if (crlf_pos == std::string::npos) {
+            break;
+        }
+        
+        std::string size_line = chunked_data.substr(pos, crlf_pos - pos);
+        
+        size_t chunk_size = 0;
+        try {
+            chunk_size = std::stoul(size_line, nullptr, 16);
+        } catch (const std::exception&) {
+            this->error_code = BAD_REQ;
+            return false;
+        }
+        
+        if (chunk_size == 0) {
+            pos = crlf_pos + 2;
+            size_t final_crlf = chunked_data.find("\r\n", pos);
+            if (final_crlf != std::string::npos) {
+            }
+            break;
+        }
+        
+        pos = crlf_pos + 2;
+        
+        if (pos + chunk_size + 2 > chunked_data.length()) {
+            return false;
+        }
+        
+        std::string chunk = chunked_data.substr(pos, chunk_size);
+        this->chunks.push_back(chunk);
+        this->body += chunk;
+        
+        pos += chunk_size;
+        if (pos + 1 < chunked_data.length() && 
+            chunked_data[pos] == '\r' && chunked_data[pos + 1] == '\n') {
+            pos += 2;
+        } else {
+            this->error_code = BAD_REQ;
+            return false;
+        }
+    }
+    
     return true;
 }
 
