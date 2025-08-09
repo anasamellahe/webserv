@@ -118,6 +118,14 @@ private:
     bool checkRequestCompletion(SocketTracker& tracker, size_t headerEnd);
 
     /**
+     * @brief Checks if the request body is completely received
+     * @param tracker Reference to socket tracker containing request data
+     * @param headerEnd Position where headers end in the raw buffer
+     * @return true if body is complete, false if more data needed
+     */
+    bool isRequestBodyComplete(SocketTracker& tracker, size_t headerEnd);
+
+    /**
      * @brief Writes HTTP response to client socket
      * @param clientFd Client socket file descriptor
      * Handles partial writes and connection management
@@ -155,6 +163,20 @@ private:
      * Prevents timeout for active connections
      */
     void updateClientActivity(int clientFd);
+
+    /**
+     * @brief Generates an error response for the client
+     * @param tracker Reference to socket tracker containing error information
+     * Creates appropriate HTTP error response based on error code
+     */
+    void generateErrorResponse(SocketTracker& tracker);
+
+    /**
+     * @brief Generates a success response for the client
+     * @param tracker Reference to socket tracker containing request information
+     * Creates a 200 OK HTTP response with request details
+     */
+    void generateSuccessResponse(SocketTracker& tracker);
 
 public:
     /**

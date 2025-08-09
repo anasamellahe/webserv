@@ -7,6 +7,7 @@ Request::Request() {
     this->is_chunked = false;
     this->Port = 0;
     this->isIp = false;
+    this->is_Complete = false;
     this->error_code.clear();
 }
 
@@ -16,6 +17,7 @@ Request::Request(int clientFD) {
     this->is_chunked = false;
     this->Port = 0;
     this->isIp = false;
+    this->is_Complete = false;
     this->error_code.clear();
 }
 
@@ -439,12 +441,12 @@ const std::map<std::string, std::string>& Request::getAllHeaders() const {
 }
 
 bool Request::isComplete() const {
-    return this->is_valid;
+    return this->is_Complete;
 }
 
 bool Request::setComplete(bool complete) {
-    this->is_valid = complete;
-    return this->is_valid;
+    this->is_Complete = complete;
+    return this->is_Complete;
 }
 
 double Request::getContentLength() {

@@ -112,17 +112,40 @@ void monitorClient::startEventLoop() {
             if (i >= static_cast<int>(fds.size())) continue;
             
             pollfd& currentFd = fds[i];
+            
+            // Handle incoming data (POLLIN)
             if (currentFd.revents & POLLIN) {
                 int keepAlive = readClientRequest(currentFd.fd);
                 updateClientActivity(currentFd.fd);
                 
                 std::map<int, SocketTracker>::iterator it = fdsTracker.find(currentFd.fd);
-                if (it != fdsTracker.end() && !it->second.response.empty()) {
-                    currentFd.events |= POLLOUT;
+                if (it != fdsTracker.end()) {
+                    if (it->second.request_obj.isComplete() && !it->second.response.empty()) {
+                        currentFd.events |= POLLOUT;
+                        
+                    }
                 }
                 
                 if (keepAlive == 0) {
                     removeClient(i);
+                    continue;
+                }
+            }
+            
+            // Handle outgoing data (POLLOUT) - WRITE RESPONSE HERE
+            if (currentFd.revents & POLLOUT) {
+                writeClientResponse(currentFd.fd);
+                
+                // Check if response is complete
+                std::map<int, SocketTracker>::iterator it = fdsTracker.find(currentFd.fd);
+                if (it != fdsTracker.end() && it->second.response.empty()) {
+                    // Response sent completely, switch back to reading
+                    currentFd.events = POLLIN;
+                    
+                    // If connection should be closed, remove client
+                    if (it->second.WError || it->second.RError) {
+                        removeClient(i);
+                    }
                 }
             }
         }
