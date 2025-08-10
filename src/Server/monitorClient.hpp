@@ -178,7 +178,7 @@ private:
      */
     void generateSuccessResponse(SocketTracker& tracker);
 
-public:
+    public:
     /**
      * @brief Exception class for monitor client errors
      * 

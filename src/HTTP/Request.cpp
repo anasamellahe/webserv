@@ -8,6 +8,7 @@ Request::Request() {
     this->Port = 0;
     this->isIp = false;
     this->is_Complete = false;
+    this->configSet = false;  // Initialize server config flag
     this->error_code.clear();
 }
 
@@ -18,6 +19,7 @@ Request::Request(int clientFD) {
     this->Port = 0;
     this->isIp = false;
     this->is_Complete = false;
+    this->configSet = false;  // Initialize server config flag
     this->error_code.clear();
 }
 
@@ -42,6 +44,7 @@ void Request::reset() {
     this->is_chunked = false;
     this->chunks.clear();
     this->is_valid = false;
+    this->configSet = false;  // Reset server config flag
 }
 
 bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t size) {
@@ -107,6 +110,11 @@ bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t si
         parseCookies();
         extractCgiInfo();
         validateRequest();
+        
+        // If request is valid and we have a host header, perform server matching
+        if (this->is_valid && !this->Host.empty() && this->configSet) {
+            matchServerConfiguration();
+        }
         
         return this->is_valid;
     }
@@ -429,6 +437,13 @@ bool Request::parseHeaders(const std::string& headers_text) {
             if (this->error_code.empty())
                 this->error_code = BAD_REQ;
             throw 1;
+        }
+        
+        // Store the parsed host and port information for server matching
+        this->Host = hostCopy;
+        // Port is set by isValidHost methods (isValidIpAddress/isValidDomainName)
+        if (this->Port == -1) {
+            this->Port = 80; // Default port if none specified
         }
     }
     
@@ -940,4 +955,125 @@ void Request::validateRequest() {
     }
     
     this->is_valid = true;
+}
+
+// Server configuration methods implementation
+void Request::setServerConfig(const Config& config) {
+    this->serverConfig = config;
+    this->configSet = true;
+}
+
+const Config& Request::getServerConfig() const {
+    if (!configSet) {
+        throw std::runtime_error("Server configuration not set for this request");
+    }
+    return serverConfig;
+}
+
+bool Request::hasServerConfig() const {
+    return configSet;
+}
+
+Config Request::getserverConfig(std::string host , int port, bool isIp) const 
+{
+    // First, try to find server by exact host and port match
+    for (size_t i = 0; i < serverConfig.servers.size(); i++) {
+        const Config::ServerConfig& server = serverConfig.servers[i];
+        
+        // Check if the port matches any of the server's ports
+        bool portMatch = false;
+        for (size_t j = 0; j < server.ports.size(); j++) {
+            if (server.ports[j] == port) {
+                portMatch = true;
+                break;
+            }
+        }
+        
+        if (!portMatch) {
+            continue;
+        }
+        
+        // If it's an IP address, match against server host
+        if (isIp) {
+            if (server.host == host) {
+                Config matchedConfig;
+                matchedConfig.servers.push_back(server);
+                return matchedConfig;
+            }
+        } else {
+            // If it's a domain name, check server_names
+            for (size_t j = 0; j < server.server_names.size(); j++) {
+                if (server.server_names[j] == host) {
+                    Config matchedConfig;
+                    matchedConfig.servers.push_back(server);
+                    return matchedConfig;
+                }
+            }
+        }
+    }
+    
+    // If no exact match found, try to find default server for the port
+    for (size_t i = 0; i < serverConfig.servers.size(); i++) {
+        const Config::ServerConfig& server = serverConfig.servers[i];
+        
+        // Check if the port matches
+        bool portMatch = false;
+        for (size_t j = 0; j < server.ports.size(); j++) {
+            if (server.ports[j] == port) {
+                portMatch = true;
+                break;
+            }
+        }
+        
+        if (portMatch && server.default_server) {
+            Config matchedConfig;
+            matchedConfig.servers.push_back(server);
+            return matchedConfig;
+        }
+    }
+    
+    // If still no match, return the first server that matches the port
+    for (size_t i = 0; i < serverConfig.servers.size(); i++) {
+        const Config::ServerConfig& server = serverConfig.servers[i];
+        
+        for (size_t j = 0; j < server.ports.size(); j++) {
+            if (server.ports[j] == port) {
+                Config matchedConfig;
+                matchedConfig.servers.push_back(server);
+                return matchedConfig;
+            }
+        }
+    }
+    
+    // If no server matches the port, return the first available server
+    if (!serverConfig.servers.empty()) {
+        Config matchedConfig;
+        matchedConfig.servers.push_back(serverConfig.servers[0]);
+        return matchedConfig;
+    }
+    
+    // Return empty config if nothing matches
+    Config emptyConfig;
+    return emptyConfig;
+}
+
+void Request::matchServerConfiguration() {
+    if (!this->configSet || this->Host.empty()) {
+        return; // Can't match without config or host
+    }
+    
+    try {
+        // Get the matched server configuration
+        Config matchedConfig = this->getserverConfig(this->Host, this->Port, this->isIp);
+        
+        // Update the server configuration with the matched one
+        this->serverConfig = matchedConfig;
+        
+        std::cout << "Successfully matched server for " << this->Host << ":" << this->Port 
+                  << (this->isIp ? " (IP)" : " (domain)") << std::endl;
+                  
+    } catch (const std::exception& e) {
+        std::cerr << "Error during server matching: " << e.what() << std::endl;
+        // Keep existing server config as fallback
+    }
 }

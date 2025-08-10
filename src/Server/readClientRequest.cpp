@@ -67,6 +67,18 @@ int monitorClient::readClientRequest(int clientFd) {
     
     // Check if we have complete headers first
     size_t headerEnd = tracker.raw_buffer.find("\r\n\r\n");
+    
+    // Set the global config in request object BEFORE parsing so server matching can work
+    if (headerEnd != std::string::npos) {
+        Config globalConfig = ServerConfig.getConfigs();
+        tracker.request_obj.setServerConfig(globalConfig);
+        
+        // Now re-parse with config available for server matching
+        parseSuccess = tracker.request_obj.parseFromSocket(clientFd, tracker.raw_buffer, tracker.raw_buffer.size());
+    }
+    
+    // Check if we have complete headers first
+    headerEnd = tracker.raw_buffer.find("\r\n\r\n");
     if (headerEnd == std::string::npos) {
         // Headers not complete yet
         tracker.request_obj.setComplete(false);

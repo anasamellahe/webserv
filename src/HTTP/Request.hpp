@@ -16,6 +16,7 @@
 #include <arpa/inet.h>
 #include "Utils.hpp"
 #include "Common.hpp"
+#include "../Config/ConfigParser.hpp"  // Include full Config definition
 
 
 #define MAX_PATH_SIZE 4000
@@ -23,8 +24,8 @@
 #define URI_T_LONG "414 URI Too Long"
 #define VERSION_ERR "505 HTTP Version Not Supported"
 
-// Forward declaration
-struct Config;
+// Remove forward declaration since we're including the full definition
+// struct Config;
 
 /**
  * @brief HTTP Request parser and handler class
@@ -42,7 +43,8 @@ class Request
     public:
 
         int clientFD;
-        // Config      serverConfig;
+        Config      serverConfig;  // Server configuration for this request
+        bool        configSet;     // Flag to track if server config has been set
         std::string requestContent;
         std::string method;             
         std::string path;                
@@ -461,6 +463,32 @@ class Request
          * @param serversConfigs Configuration containing all servers
          * @return Matching server configuration
          */
-        Config getserverConfig(std::string serverToFind, const Config& serversConfigs); //   host or serverName
+        Config getserverConfig(std::string host , int port, bool isIp) const ;
+
+        /**
+         * @brief Matches and sets the appropriate server configuration for this request
+         * Uses the parsed Host header and port to find the matching server configuration
+         * and updates the request's server config automatically
+         */
+        void matchServerConfiguration();
+
+        /**
+         * @brief Sets the server configuration for this request
+         * @param config string containing  host and port and a boolean indicating if it is an IP
+         */
+        void setServerConfig(const Config& config);
+
+        /**
+         * @brief Gets the current server configuration
+         * @return Reference to the server configuration
+         * @throws std::runtime_error if no server config has been set
+         */
+        const Config& getServerConfig() const;
+
+        /**
+         * @brief Checks if server configuration has been set
+         * @return true if server config is available, false otherwise
+         */
+        bool hasServerConfig() const;
     
 };
