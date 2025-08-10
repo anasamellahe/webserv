@@ -6,6 +6,7 @@
 #include <iostream>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include "../HTTP/DirectoryListing.hpp"
 
 #define MAX_HEADER_SIZE 8192
 

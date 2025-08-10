@@ -1,5 +1,6 @@
 #include "monitorClient.hpp"
 #include "../Socket/socket.hpp"
+#include "../HTTP/DirectoryListing.hpp"
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
@@ -120,9 +121,16 @@ void monitorClient::startEventLoop() {
                 
                 std::map<int, SocketTracker>::iterator it = fdsTracker.find(currentFd.fd);
                 if (it != fdsTracker.end()) {
-                    if (it->second.request_obj.isComplete() && !it->second.response.empty()) {
-                        currentFd.events |= POLLOUT;
+                    if (it->second.request_obj.isComplete() && it->second.response.empty()) {
+                        // Request is complete, generate response based on matched server config
+                        if (!it->second.error.empty()) {
+                            generateErrorResponse(it->second);
+                        } else {
+                            generateSuccessResponse(it->second);
+                        }
                         
+                        // Switch to write mode
+                        currentFd.events |= POLLOUT;
                     }
                 }
                 

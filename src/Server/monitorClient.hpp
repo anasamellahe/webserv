@@ -178,7 +178,31 @@ private:
      */
     void generateSuccessResponse(SocketTracker& tracker);
 
-    public:
+    /**
+     * @brief Generates a simple fallback response
+     * @param tracker Reference to socket tracker containing request information
+     * Creates a basic HTTP response when server matching fails
+     */
+    void generateSimpleResponse(SocketTracker& tracker);
+
+    /**
+     * @brief Generates an error response using server configuration
+     * @param tracker Reference to socket tracker
+     * @param errorCode HTTP error code
+     * @param errorMessage Error message string
+     * @param server Server configuration to use for error pages
+     */
+    void generateErrorResponseWithConfig(SocketTracker& tracker, int errorCode, const std::string& errorMessage, const Config::ServerConfig& server);
+
+    /**
+     * @brief Generates an HTTP redirect response
+     * @param tracker Reference to socket tracker
+     * @param redirectCode HTTP redirect code (301, 302, etc.)
+     * @param location Redirect target URL
+     */
+    void generateRedirectResponse(SocketTracker& tracker, int redirectCode, const std::string& location);
+
+public:
     /**
      * @brief Exception class for monitor client errors
      * 
