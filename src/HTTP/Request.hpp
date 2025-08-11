@@ -43,7 +43,8 @@ class Request
     public:
 
         int clientFD;
-        Config      serverConfig;  // Server configuration for this request
+        Config::ServerConfig    serverConfig;  // Server configuration for this request
+    
         bool        configSet;     // Flag to track if server config has been set
         std::string requestContent;
         std::string method;             

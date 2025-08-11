@@ -1046,7 +1046,7 @@ Config Request::getserverConfig(std::string host , int port, bool isIp) const
     }
     
     // If no server matches the port, return the first available server
-    if (!serverConfig.servers.empty()) {
+    if (!serverConfig.empty()) {
         Config matchedConfig;
         matchedConfig.servers.push_back(serverConfig.servers[0]);
         return matchedConfig;

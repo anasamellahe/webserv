@@ -71,6 +71,8 @@ struct Config {
         typedef std::vector<std::string>::const_iterator ConstServerNameIterator;
         typedef std::vector<RouteConfig>::iterator RouteIterator;
         typedef std::vector<RouteConfig>::const_iterator ConstRouteIterator;
+        typedef std::map<int, std::string>::iterator ErrorPagesIterator;
+    typedef std::map<int, std::string>::const_iterator ConstErrorPagesIterator;
     };
     
     std::vector<ServerConfig> servers;  // All server configurations
@@ -193,7 +195,8 @@ public:
      * @param isIp Boolean that indicates whether the host is an IP or a server name 
      * @return Returns a struct containing the server config
      */
-    Config getServerConfig(std::string Host, bool isIp);
+    Config::ServerConfig getServerConfig(std::string Host, int port , bool isIp);
+
 };
 
 #endif

@@ -13,3 +13,16 @@ Tasks I need to do: Anas
 
 Tasks I need to do: Sami
 - ❌Complete the reading from the client and set the request completed boolean
+
+
+
+
+120.20.20.3:9090
+
+host 120.20.20.3
+port 9090;
+
+server name :
+host:
+:8080
+
