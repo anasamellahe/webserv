@@ -43,8 +43,7 @@ class Request
     public:
 
         int clientFD;
-        Config::ServerConfig    serverConfig;  // Server configuration for this request
-    
+        Config      serverConfig;  // Server configuration for this request (changed from Config::ServerConfig)
         bool        configSet;     // Flag to track if server config has been set
         std::string requestContent;
         std::string method;             
@@ -491,5 +490,23 @@ class Request
          * @return true if server config is available, false otherwise
          */
         bool hasServerConfig() const;
+
+        /**
+         * @brief Gets the current matched server configuration
+         * @return Pointer to current server config, or nullptr if no match
+         */
+        const Config::ServerConfig* getCurrentServer() const;
+
+        /**
+         * @brief Gets the current server's host
+         * @return Current server host string, empty if no server matched
+         */
+        std::string getCurrentServerHost() const;
+
+        /**
+         * @brief Gets the current server's primary name
+         * @return First server name, or host if no server names configured
+         */
+        std::string getCurrentServerName() const;
     
 };

@@ -11,10 +11,6 @@ OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRCS))
 
 INCLUDES = -I./src
 
-# Add DirectoryListing.cpp to HTTP objects
-HTTP_SOURCES = src/HTTP/Request.cpp src/HTTP/Response.cpp src/HTTP/Utils.cpp src/HTTP/DirectoryListing.cpp
-HTTP_OBJECTS = $(patsubst src/%.cpp,obj/%.o,$(HTTP_SOURCES))
-
 all: $(NAME)
 
 $(NAME): $(OBJS)
