@@ -19,6 +19,7 @@ protected:
     virtual void handle() = 0;
     std::string buildDefaultBodyError(int code);
     std::string ReadFromFile(const std::string &path);
+    std::string GenerateDefaultError(int code);
 
     bool isMethodAllowed();
     void setStatus(int statusCode, std::string& statusText);
