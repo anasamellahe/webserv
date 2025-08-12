@@ -17,28 +17,12 @@ void ResponseBase::buildError(int code,  std::string text){
     }
 }
 
-std::string ReadFromFile(const std::string &path)
-{
-    
-}
+
 std::string ResponseBase::buildDefaultBodyError(int code){
 
-    std::string path;
     Config::ServerConfig::ErrorPagesIterator it;
-    it =  request.serverConfig.error_pages.find(code);
-    if (it != request.serverConfig.error_pages.end()){
-        path =  it->second;
-        try{
-            this->body =  ReadFromFile(path);
-        }
-        catch(...)
-        {
-
-        }
-    }
-    else
-        this->body =  GenerateDefaultError(code);
-
+    it =  request.serverConfig.
+    if (path ==  std::)
     // we need to add the config struct to the requests to have  a reference to the erro  pages 
 }
 const std::string & ResponseBase::generate(){
