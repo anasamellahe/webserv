@@ -959,7 +959,7 @@ void Request::validateRequest() {
 
 // Server configuration methods implementation
 void Request::setServerConfig(const Config& config) {
-    this->serverConfig = config;
+    this->fullServerConfig = config;
     this->configSet = true;
 }
 
@@ -967,7 +967,7 @@ const Config& Request::getServerConfig() const {
     if (!configSet) {
         throw std::runtime_error("Server configuration not set for this request");
     }
-    return serverConfig;
+    return fullServerConfig;
 }
 
 bool Request::hasServerConfig() const {
@@ -977,8 +977,8 @@ bool Request::hasServerConfig() const {
 Config Request::getserverConfig(std::string host , int port, bool isIp) const 
 {
     // First, try to find server by exact host and port match
-    for (size_t i = 0; i < serverConfig.servers.size(); i++) {
-        const Config::ServerConfig& server = serverConfig.servers[i];
+    for (size_t i = 0; i < fullServerConfig.servers.size(); i++) {
+        const Config::ServerConfig& server = fullServerConfig.servers[i];
         
         // Check if the port matches any of the server's ports
         bool portMatch = false;
@@ -1013,8 +1013,8 @@ Config Request::getserverConfig(std::string host , int port, bool isIp) const
     }
     
     // If no exact match found, try to find default server for the port
-    for (size_t i = 0; i < serverConfig.servers.size(); i++) {
-        const Config::ServerConfig& server = serverConfig.servers[i];
+    for (size_t i = 0; i < fullServerConfig.servers.size(); i++) {
+        const Config::ServerConfig& server = fullServerConfig.servers[i];
         
         // Check if the port matches
         bool portMatch = false;
@@ -1033,8 +1033,8 @@ Config Request::getserverConfig(std::string host , int port, bool isIp) const
     }
     
     // If still no match, return the first server that matches the port
-    for (size_t i = 0; i < serverConfig.servers.size(); i++) {
-        const Config::ServerConfig& server = serverConfig.servers[i];
+    for (size_t i = 0; i < fullServerConfig.servers.size(); i++) {
+        const Config::ServerConfig& server = fullServerConfig.servers[i];
         
         for (size_t j = 0; j < server.ports.size(); j++) {
             if (server.ports[j] == port) {
@@ -1046,9 +1046,9 @@ Config Request::getserverConfig(std::string host , int port, bool isIp) const
     }
     
     // If no server matches the port, return the first available server
-    if (!serverConfig.servers.empty()) {
+    if (!fullServerConfig.servers.empty()) {
         Config matchedConfig;
-        matchedConfig.servers.push_back(serverConfig.servers[0]);
+        matchedConfig.servers.push_back(fullServerConfig.servers[0]);
         return matchedConfig;
     }
     
@@ -1066,40 +1066,23 @@ void Request::matchServerConfiguration() {
         // Get the matched server configuration
         Config matchedConfig = this->getserverConfig(this->Host, this->Port, this->isIp);
         
-        // Update the server configuration with the matched one
-        this->serverConfig = matchedConfig;
-        
-        std::cout << "Successfully matched server for " << this->Host << ":" << this->Port 
-                  << (this->isIp ? " (IP)" : " (domain)") << std::endl;
+        // Store the matched server configuration
+        if (!matchedConfig.servers.empty()) {
+            this->serverConfig = matchedConfig.servers[0];
+        }
                   
     } catch (const std::exception& e) {
         std::cerr << "Error during server matching: " << e.what() << std::endl;
-        // Keep existing server config as fallback
+        // Use default server config as fallback
+        if (!fullServerConfig.servers.empty()) {
+            this->serverConfig = fullServerConfig.servers[0];
+        }
     }
 }
 
 const Config::ServerConfig* Request::getCurrentServer() const {
-    if (!configSet || serverConfig.servers.empty()) {
+    if (!configSet) {
         return nullptr;
     }
-    return &serverConfig.servers[0]; // Return the matched server (first in the matched config)
-}
-
-std::string Request::getCurrentServerHost() const {
-    const Config::ServerConfig* currentServer = getCurrentServer();
-    if (currentServer) {
-        return currentServer->host;
-    }
-    return ""; // Return empty string if no server matched
-}
-
-std::string Request::getCurrentServerName() const {
-    const Config::ServerConfig* currentServer = getCurrentServer();
-    if (currentServer) {
-        if (!currentServer->server_names.empty()) {
-            return currentServer->server_names[0]; // Return first server name
-        }
-        return currentServer->host; // Fallback to host if no server names
-    }
-    return ""; // Return empty string if no server matched
+    return &serverConfig;
 }
