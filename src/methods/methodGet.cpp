@@ -7,6 +7,8 @@ GETMETHOD::GETMETHOD(Request& request): request(request)
 
 std::string GETMETHOD::GetDataFromServer()
 {
+    //const Config::ServerConfig* serverConfig = request.getCurrentServer();
+    
 
 }
 
