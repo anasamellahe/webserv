@@ -8,10 +8,12 @@ GETMETHOD::GETMETHOD(Request& request): request(request)
 std::string GETMETHOD::GetDataFromServer()
 {
 
+
 }
 
 bool GETMETHOD::CheckIfServerSupportMethod()
 {
+
 
 }
 
