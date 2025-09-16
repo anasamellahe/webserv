@@ -48,6 +48,8 @@ void Request::reset() {
 }
 
 bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t size) {
+    // Reset parsing state to avoid leftover errors from previous requests
+    this->reset();
     this->clientFD = clientFD;
     this->requestContent = buffer.substr(0, size);
     
@@ -66,11 +68,35 @@ bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t si
             header_lines.push_back(headers_section.substr(prev, pos - prev));
             prev = pos + 2;
         }
+        // push the final header line (the loop above misses the last line since headers_section
+        // does not include the trailing CRLF of the last header when extracted using header_end)
+        if (prev < headers_section.size()) {
+            header_lines.push_back(headers_section.substr(prev));
+        }
         
         if (header_lines.empty()) {
             this->error_code = BAD_REQ;
             return false;
         }
+
+        // Merge folded headers (continuation lines starting with SP/HTAB)
+        std::vector<std::string> merged_lines;
+        for (size_t i = 0; i < header_lines.size(); ++i) {
+            const std::string &ln = header_lines[i];
+            if (!ln.empty() && (ln[0] == ' ' || ln[0] == '\t')) {
+                if (!merged_lines.empty()) {
+                    size_t cont = ln.find_first_not_of(" \t");
+                    std::string part = (cont == std::string::npos) ? std::string() : ln.substr(cont);
+                    if (!part.empty()) merged_lines.back() += std::string(" ") + part;
+                } else {
+                    // treat as a normal header if it's the first line
+                    merged_lines.push_back(ln);
+                }
+            } else {
+                merged_lines.push_back(ln);
+            }
+        }
+        header_lines.swap(merged_lines);
 
         try {
             parseStartLine(header_lines[0]);
@@ -78,7 +104,7 @@ bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t si
             this->is_valid = false;
             return false;
         }
-        
+
         for (size_t i = 1; i < header_lines.size(); i++) {
             try {
                 parseHeaders(header_lines[i]);
@@ -99,7 +125,7 @@ bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t si
             std::string body_data = this->requestContent.substr(header_end + 4);
             
             ConstHeaderIterator transfer_encoding = this->headers.find("transfer-encoding");
-            if (transfer_encoding != this->headers.cend() && 
+            if (transfer_encoding != this->headers.end() && 
                 transfer_encoding->second.find("chunked") != std::string::npos) {
                 parseChunkedTransfer(body_data);
             } else {
@@ -116,6 +142,8 @@ bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t si
             matchServerConfiguration();
         }
         
+    // leave error handling to caller; avoid spamming logs here
+
         return this->is_valid;
     }
     catch (int error_code) {
@@ -212,7 +240,7 @@ const std::string& Request::getVersion() const {
 
 const std::string& Request::getHeader(const std::string& key) const {
     ConstHeaderIterator it = this->headers.find(key);
-    if (it != headers.cend()) {
+    if (it != headers.end()) {
         return it->second;
     }
     return key;
@@ -365,12 +393,11 @@ bool Request::isValidDomainName(std::string& hostValue) {
     size_t colonPos = hostValue.find(':');
     if (colonPos != std::string::npos) {
         std::string portPart = hostValue.substr(colonPos + 1);
-        try {
             for (size_t i = 0; i < portPart.length(); i++) {
                 if (!isdigit(portPart[i]))
                     return false;
             }
-            int port = std::stoi(portPart);
+            int port = atoi(portPart.c_str());
             if (isValidPort(port)) {
                 this->Port = port;
                 hostValue = hostValue.substr(0, colonPos);
@@ -378,9 +405,6 @@ bool Request::isValidDomainName(std::string& hostValue) {
             } else {
                 return false;
             }
-        } catch (...) {
-            return false;
-        }
     } else {
         setHost(hostValue);
         this->Port = -1;
@@ -411,13 +435,25 @@ bool Request::parseHeaders(const std::string& headers_text) {
     
     key = headers_text.substr(0, pos);
     stringToLower(key);
-    
+    // Trim whitespace around key
+    size_t kstart = key.find_first_not_of(" \t");
+    size_t kend = key.find_last_not_of(" \t");
+    if (kstart == std::string::npos) {
+        key.clear();
+    } else {
+        key = key.substr(kstart, kend - kstart + 1);
+    }
+
     size_t valueStartIndex = headers_text.find_first_not_of(": \r\t\v\f", pos);
     if (valueStartIndex == std::string::npos) {
-        valueStartIndex = pos;
+        valueStartIndex = pos + 1;
     }
-    
-    value = headers_text.substr(valueStartIndex, headers_text.rfind("\r\n") - valueStartIndex);
+
+    // Header line passed in does not contain CRLF terminator here (we split by CRLF earlier)
+    value = headers_text.substr(valueStartIndex);
+    // Remove any trailing CR or LF left in the line
+    while (!value.empty() && (value.back() == '\r' || value.back() == '\n'))
+        value.pop_back();
     stringToLower(value);
     if (!isValidKey(key) || !isValidValue(value)){
         if (this->error_code.empty())
@@ -466,14 +502,12 @@ bool Request::setComplete(bool complete) {
 
 double Request::getContentLength() {
     ConstHeaderIterator it = this->headers.find("content-length");
-    if (it != this->headers.cend()) {
-        try {
-            return std::stod(it->second);
-        } catch (const std::invalid_argument&) {
+    if (it != this->headers.end()) {
+        char *endptr = NULL;
+        double val = strtod(it->second.c_str(), &endptr);
+        if (endptr == it->second.c_str())
             return 0.0;
-        } catch (const std::out_of_range&) {
-            return 0.0;
-        }                   
+        return val;
     }
     return 0.0;
 }
@@ -513,17 +547,12 @@ void Request::addUpload(const std::string& key, const FilePart& file_part) {
 
 bool Request::parseBody(const std::string& body_data) {
     ConstHeaderIterator cl_it = this->headers.find("content-length");
-    if (cl_it != this->headers.cend()) {
-        try {
-            size_t expected_length = std::stoul(cl_it->second);
-            if (body_data.length() != expected_length) {
-                if (body_data.length() < expected_length) {
-                    return false;
-                }
-                this->error_code = BAD_REQ;
+    if (cl_it != this->headers.end()) {
+        unsigned long expected_length = strtoul(cl_it->second.c_str(), NULL, 10);
+        if (body_data.length() != expected_length) {
+            if (body_data.length() < expected_length) {
                 return false;
             }
-        } catch (const std::exception&) {
             this->error_code = BAD_REQ;
             return false;
         }
@@ -534,14 +563,15 @@ bool Request::parseBody(const std::string& body_data) {
     }
     
     ConstHeaderIterator it = this->headers.find("content-type");
-    if (it != this->headers.cend()) {
+    if (it != this->headers.end()) {
         std::string content_type = it->second;
         if (content_type.find("multipart/form-data") != std::string::npos) {
             size_t boundary_pos = content_type.find("boundary=");
             if (boundary_pos != std::string::npos) {
                 std::string boundary = content_type.substr(boundary_pos + 9);
-                if (!boundary.empty() && boundary[0] == '"' && boundary.back() == '"') {
-                    boundary = boundary.substr(1, boundary.length() - 2);
+                if (!boundary.empty() && boundary[0] == '"' && boundary[boundary.length() - 1] == '"') {
+                    if (boundary.length() >= 2)
+                        boundary = boundary.substr(1, boundary.length() - 2);
                 }
                 return parseMultipartBody(body_data, boundary);
             }
@@ -616,8 +646,8 @@ bool Request::parseMultipartPart(const std::string& part_data) {
     std::string line;
     
     while (std::getline(ss, line)) {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
+        if (!line.empty() && line[line.size() - 1] == '\r') {
+            line = line.substr(0, line.size() - 1);
         }
         
         size_t colon_pos = line.find(':');
@@ -635,7 +665,7 @@ bool Request::parseMultipartPart(const std::string& part_data) {
         }
     }
     
-    auto cd_it = part_headers.find("content-disposition");
+    std::map<std::string, std::string>::iterator cd_it = part_headers.find("content-disposition");
     if (cd_it != part_headers.end()) {
         std::string disposition = cd_it->second;
         std::string name, filename;
@@ -664,7 +694,7 @@ bool Request::parseMultipartPart(const std::string& part_data) {
                 file_part.filename = filename;
                 file_part.content = body_section;
                 
-                auto ct_it = part_headers.find("content-type");
+                std::map<std::string, std::string>::iterator ct_it = part_headers.find("content-type");
                 if (ct_it != part_headers.end()) {
                     file_part.content_type = ct_it->second;
                 }
@@ -773,9 +803,9 @@ bool Request::parseChunkedTransfer(const std::string& chunked_data) {
         std::string size_line = chunked_data.substr(pos, crlf_pos - pos);
         
         size_t chunk_size = 0;
-        try {
-            chunk_size = std::stoul(size_line, nullptr, 16);
-        } catch (const std::exception&) {
+        char *endptr = NULL;
+        chunk_size = strtoul(size_line.c_str(), &endptr, 16);
+        if (endptr == size_line.c_str()) {
             this->error_code = BAD_REQ;
             return false;
         }
@@ -844,7 +874,7 @@ bool Request::extractCgiInfo() {
 
 bool Request::parseCookies() {
     ConstHeaderIterator it = this->headers.find("cookie");
-    if (it != this->headers.cend()) {
+    if (it != this->headers.end()) {
         std::string cookie_str = it->second;
         std::string::size_type pos = 0;
         std::string::size_type prev = 0;
@@ -932,22 +962,17 @@ void Request::validateRequest() {
     }
     
     ConstHeaderIterator host_it = this->headers.find("host");
-    if (host_it == this->headers.cend()) {
+    if (host_it == this->headers.end()) {
         this->error_code = BAD_REQ;
         this->is_valid = false;
         return;
     }
     
     ConstHeaderIterator cl_it = this->headers.find("content-length");
-    if (cl_it != this->headers.cend()) {
-        try {
-            double content_length = std::stod(cl_it->second);
-            if (content_length < 0) {
-                this->error_code = BAD_REQ;
-                this->is_valid = false;
-                return;
-            }
-        } catch (const std::exception&) {
+    if (cl_it != this->headers.end()) {
+        char *endptr = NULL;
+        double content_length = strtod(cl_it->second.c_str(), &endptr);
+        if (endptr == cl_it->second.c_str() || content_length < 0) {
             this->error_code = BAD_REQ;
             this->is_valid = false;
             return;
@@ -1056,11 +1081,11 @@ Config Request::getserverConfig(std::string host , int port, bool isIp) const
     Config emptyConfig;
     return emptyConfig;
 }
-
 void Request::matchServerConfiguration() {
-    if (!this->configSet || this->Host.empty()) {
-        return; // Can't match without config or host
-    }
+    std::cout << "hello in matchServerConfiguration \n";
+    // if (!this->configSet || this->Host.empty()) {
+    //     return; // Can't match without config or host
+    // }
     
     try {
         // Get the matched server configuration
@@ -1082,7 +1107,7 @@ void Request::matchServerConfiguration() {
 
 const Config::ServerConfig* Request::getCurrentServer() const {
     if (!configSet) {
-        return nullptr;
+    return NULL;
     }
     return &serverConfig;
 }

@@ -22,9 +22,9 @@ protected:
     std::string GenerateDefaultError(int code);
 
     bool isMethodAllowed();
-    void setStatus(int statusCode, std::string& statusText);
-    void setBody(std::string & body);
-    void addHeader(std::string& key, std::string& value);
+    void setStatus(int statusCode, const std::string& statusText);
+    void setBody(const std::string & body);
+    void addHeader(const std::string& key, const std::string& value);
     std::string detectContentType();
     void finalize();
 

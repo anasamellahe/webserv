@@ -1,6 +1,6 @@
 #include "monitorClient.hpp"
 #include "../Socket/socket.hpp"
-#include "../HTTP/DirectoryListing.hpp"
+
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
@@ -217,7 +217,11 @@ void monitorClient::checkTimeouts() {
             it->second.response = "HTTP/1.1 408 Request Timeout\r\n";
             it->second.response += "Connection: close\r\n";
             it->second.response += "Content-Type: text/html\r\n";
-            it->second.response += "Content-Length: " + std::to_string(timeoutHtml.length()) + "\r\n\r\n";
+            {
+                std::ostringstream tmp;
+                tmp << timeoutHtml.length();
+                it->second.response += "Content-Length: " + tmp.str() + "\r\n\r\n";
+            }
             it->second.response += timeoutHtml;
             fds[i].events = POLLOUT;
         }

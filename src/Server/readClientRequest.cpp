@@ -6,7 +6,11 @@
 #include <iostream>
 #include <fcntl.h>
 #include <sys/socket.h>
-#include "../HTTP/DirectoryListing.hpp"
+
+// Response handlers
+#include "../methods/ResponseGet.hpp"
+#include "../methods/ResponsePost.hpp"
+#include "../methods/ResponseDelete.hpp"
 
 #define MAX_HEADER_SIZE 8192
 
@@ -77,6 +81,12 @@ int monitorClient::readClientRequest(int clientFd) {
         // Now re-parse with config available for server matching
         parseSuccess = tracker.request_obj.parseFromSocket(clientFd, tracker.raw_buffer, tracker.raw_buffer.size());
     }
+
+    // If parsing failed and we have some data, log a truncated view of the raw request to aid debugging
+    if (!parseSuccess && !tracker.raw_buffer.empty()) {
+        std::string preview = tracker.raw_buffer.substr(0, std::min<size_t>(tracker.raw_buffer.size(), 512));
+        std::cerr << "[DEBUG] Raw request (truncated):\n" << preview << "\n--- end preview ---" << std::endl;
+    }
     
     // Check if we have complete headers first
     headerEnd = tracker.raw_buffer.find("\r\n\r\n");
@@ -129,13 +139,13 @@ bool monitorClient::isRequestBodyComplete(SocketTracker& tracker, size_t headerE
     // Check Content-Length header
     const std::string& contentLengthHeader = tracker.request_obj.getHeader("content-length");
     if (contentLengthHeader != "content-length") { // getHeader returns key if not found
-        try {
-            size_t expectedLength = std::stoul(contentLengthHeader);
-            return bodyReceived >= expectedLength;
-        } catch (const std::exception&) {
+        char *endptr = NULL;
+        unsigned long expectedLength = strtoul(contentLengthHeader.c_str(), &endptr, 10);
+        if (endptr == contentLengthHeader.c_str()) {
             // Invalid Content-Length, assume no body expected
             return true;
         }
+        return bodyReceived >= expectedLength;
     }
     
     // Check for chunked transfer encoding
@@ -158,17 +168,91 @@ bool monitorClient::isRequestBodyComplete(SocketTracker& tracker, size_t headerE
 }
 
 void monitorClient::writeClientResponse(int clientFd) {
-    (void)clientFd; 
+    TrackerIt it = fdsTracker.find(clientFd);
+    if (it == fdsTracker.end()) return;
+    SocketTracker& tracker = it->second;
+
+    if (tracker.response.empty()) return;
+
+    ssize_t w = write(clientFd, tracker.response.c_str(), tracker.response.size());
+    if (w > 0) {
+        tracker.response.erase(0, w);
+    } else if (w == -1) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // Try later
+            return;
+        }
+        // fatal write error
+        tracker.WError = 1;
+        std::cerr << "[ERROR] write to client " << clientFd << " failed: " << strerror(errno) << std::endl;
+        return;
+    }
+
+    // If response fully sent and connection should be closed, mark for removal
+    if (tracker.response.empty()) {
+        const std::string& connHdr = tracker.request_obj.getHeader("connection");
+        if (connHdr == "close") {
+            tracker.WError = 1; // will be removed by caller
+        }
+    }
 }
 
 void monitorClient::generateErrorResponse(SocketTracker& tracker) {
-    (void)tracker;
-   // hna generate ila kan chi error code for exemple 431 , 503 ...
-   //use tracker.error to generate the respons
+    // Build a simple error response from tracker.error (like "400 Bad Request")
+    std::string err = tracker.error;
+    if (err.empty()) err = "500 Internal Server Error";
+    // split code and text
+    std::istringstream ss(err);
+    std::string codeStr, rest;
+    ss >> codeStr;
+    std::getline(ss, rest);
+    if (!rest.empty() && rest[0] == ' ') rest.erase(0,1);
+    if (codeStr.empty()) codeStr = "500";
+    if (rest.empty()) rest = "Error";
+
+    std::ostringstream body;
+    body << "<html><head><title>" << codeStr << "</title></head>"
+        << "<body><h1>" << codeStr << "</h1><p>" << rest << "</p></body></html>";
+
+    std::ostringstream resp;
+    resp << "HTTP/1.1 " << codeStr << " " << rest << "\r\n";
+    resp << "Content-Type: text/html; charset=utf-8\r\n";
+    resp << "Connection: close\r\n";
+    resp << "Content-Length: " << body.str().size() << "\r\n\r\n";
+    resp << body.str();
+
+    tracker.response = resp.str();
+    tracker.WError = 0;
 }
 
 void monitorClient::generateSuccessResponse(SocketTracker& tracker) {
-    (void)tracker;
-    // Simple 200 OK response for now
+    Request &req = tracker.request_obj;
+    const std::string &method = req.getMethod();
+
+    try {
+        if (method == "GET"){
+            ResponseGet handler(req);
+            tracker.response = handler.generate();
+        } else if (method == "POST"){
+            ResponsePost handler(req);
+            tracker.response = handler.generate();
+        } else if (method == "DELETE"){
+            ResponseDelete handler(req);
+            tracker.response = handler.generate();
+        } else {
+            // 501 Not Implemented
+            std::ostringstream b;
+            b << "<html><body><h1>501 Not Implemented</h1><p>Method " << method << " not implemented.</p></body></html>";
+            std::ostringstream resp;
+            resp << "HTTP/1.1 501 Not Implemented\r\n";
+            resp << "Content-Type: text/html; charset=utf-8\r\n";
+            resp << "Content-Length: " << b.str().size() << "\r\n\r\n";
+            resp << b.str();
+            tracker.response = resp.str();
+        }
+    } catch (...) {
+        tracker.error = "500 Internal Server Error";
+        generateErrorResponse(tracker);
+    }
 
 }
