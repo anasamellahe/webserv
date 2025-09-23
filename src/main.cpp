@@ -3,6 +3,7 @@
 #include "Socket/socket.hpp"
 #include "Server/monitorClient.hpp"
 #include "Config/ConfigParser.hpp"
+#include <ctime>
 
 void printConfig(const Config& config) {
     std::cout << "\n========== CONFIGURATION SUMMARY ==========\n";
@@ -95,16 +96,17 @@ int main(int argc, char** argv) {
         int parse_config = config_parser.parseConfigFile(config_file);
         if (parse_config == 0) {
             config_parser.initializeServerListenAddresses();
-            printConfig(config_parser.getConfigs());
+            // printConfig(config_parser.getConfigs());
             
 
             // make sock constructor  accept a object of the config parser  class 
             sock socketCreate(config_parser);
 
-            std::cout << "Sockets created successfully" << std::endl;
-            
+            time_t tnow = time(NULL);
+            std::cout << "[INFO] " << "Sockets created successfully at " << std::ctime(&tnow);
+
             monitorClient mc(socketCreate);
-            std::cout << "Starting event loop..." << std::endl;
+            std::cout << "[INFO] " << "Starting event loop" << std::endl;
             mc.startEventLoop();
         } else {
             std::cerr << "Error parsing configuration file." << std::endl;

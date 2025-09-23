@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>How we built this demo server</title>
+  <link rel="stylesheet" href="/static/site.css">
+  <meta name="description" content="Architecture and design notes for the demo server">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1 class="brand">Sami Static — Blog</h1>
+      <nav class="main-nav">
+        <a href="/">Home</a>
+        <a href="/blog/">Blog</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="panel">
+      <h1>How we built this demo server</h1>
+      <p class="muted">By Sami — Sep 2025</p>
+      <p>This post explains the architecture used in the demo server: non-blocking sockets, poll-based reactor, incremental HTTP parsing and partial-write support.</p>
+      <p>It also highlights why we keep the reactor thread responsive and recommend offloading heavy tasks to worker threads.</p>
+      <p><a href="/blog/" class="muted">← Back to blog</a></p>
+    </article>
+  </main>
+</body>
+</html>

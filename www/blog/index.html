@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Blog — Sami Static Site</title>
+  <link rel="stylesheet" href="/static/site.css">
+  <meta name="description" content="Updates and articles about the Sami static demo server">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1 class="brand">Sami Static — Blog</h1>
+      <nav class="main-nav">
+        <a href="/">Home</a>
+        <a href="/about.html">About</a>
+        <a href="/contact.html">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h2>From the devs</h2>
+      <p class="muted">Short posts about design decisions, uploads, and deployment tips for this demo server.</p>
+    </section>
+
+    <section class="panel">
+      <div class="post-card">
+        <h3><a href="/blog/post1.html">How we built this demo server</a></h3>
+        <p class="muted">By Sami — Sep 2025</p>
+        <p>Learn about the non-blocking reactor, incremental HTTP parsing, and partial write handling that make this server responsive.</p>
+        <p><a class="btn" href="/blog/post1.html">Read more</a></p>
+      </div>
+
+      <div class="post-card" style="margin-top:12px">
+        <h3><a href="/blog/post2.html">Handling uploads and downloads safely</a></h3>
+        <p class="muted">By Sami — Sep 2025</p>
+        <p>Approach to safe uploads, size limits, directory listings and the demo /uploads route.</p>
+        <p><a class="btn" href="/blog/post2.html">Read more</a></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container"><small>&copy; 2025 Sami Static Demo — Blog</small></div>
+  </footer>
+</body>
+</html>

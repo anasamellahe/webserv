@@ -6,6 +6,8 @@
 #include <cstring>
 #include <iostream>
 #include <fcntl.h>
+#include <ctime>
+#include <sstream>
 
 
 #define CHUNK_SIZE 8192
@@ -17,10 +19,13 @@ monitorClient::monitorClient(sock serverSockets) : ServerConfig(serverSockets.ge
     pollfd serverPollFd;
     for (size_t i = 0; i < serverFDs.size(); i++) {
         memset(&serverPollFd, 0, sizeof(serverPollFd));
-        std::cout << "socket add == [ " << serverFDs[i] << " ]\n";
         serverPollFd.fd = serverFDs[i];
         serverPollFd.events = POLLIN;
         fds.push_back(serverPollFd);
+        // Informational log
+        std::ostringstream ss;
+        ss << "[INFO] " << "Server: listening socket added (fd=" << serverFDs[i] << ")";
+        std::cout << ss.str() << std::endl;
     }
     this->numberOfServers = serverFDs.size();
 }
@@ -64,7 +69,10 @@ void monitorClient::acceptNewClient(int serverFD) {
             return;
         }
         
-        std::cout << "Server " << serverFD << " accepted new connection " << clientFd << std::endl;
+    // Log accepted connection with client FD and server FD
+    std::ostringstream ss;
+    ss << "[INFO] " << "Server (listen_fd=" << serverFD << ") accepted new connection (client_fd=" << clientFd << ")";
+    std::cout << ss.str() << std::endl;
     } catch (const std::exception& e) {
         std::cerr << "Exception while adding client " << clientFd << ": " << e.what() << std::endl;
         close(clientFd);
@@ -116,44 +124,79 @@ void monitorClient::startEventLoop() {
             
             // Handle incoming data (POLLIN)
             if (currentFd.revents & POLLIN) {
-                int keepAlive = readClientRequest(currentFd.fd);
+                // If there's already a fully-parsed request and a pending response,
+                // avoid reading further from this socket until the response is sent.
+                // This prevents the reactor from reading pipelined bytes while the
+                // response is not yet written out.
+                std::map<int, SocketTracker>::iterator it_check = fdsTracker.find(currentFd.fd);
+                if (it_check != fdsTracker.end()) {
+                    if (it_check->second.request_obj.isComplete() && !it_check->second.response.empty()) {
+                        // Ensure POLLOUT is enabled so we can continue writing the response
+                        currentFd.events |= POLLOUT;
+                        // Skip reading for now
+                        continue;
+                    }
+                }
+
+                (void)readClientRequest(currentFd.fd);
                 updateClientActivity(currentFd.fd);
-                
+
                 std::map<int, SocketTracker>::iterator it = fdsTracker.find(currentFd.fd);
                 if (it != fdsTracker.end()) {
-                    if (it->second.request_obj.isComplete() && it->second.response.empty()) {
-                        // Request is complete, generate response based on matched server config
+                    // Generate response if request complete and none queued yet
+                    if (it->second.request_obj.isComplete()) {
                         if (!it->second.error.empty()) {
                             generateErrorResponse(it->second);
                         } else {
                             generateSuccessResponse(it->second);
                         }
-                        
-                        // Switch to write mode
+                    }
+                    // Arm writer if we have any response data queued (pipelining supported)
+                    if (!it->second.response.empty()) {
                         currentFd.events |= POLLOUT;
                     }
-                }
-                
-                if (keepAlive == 0) {
-                    removeClient(i);
-                    continue;
                 }
             }
             
             // Handle outgoing data (POLLOUT) - WRITE RESPONSE HERE
             if (currentFd.revents & POLLOUT) {
-                writeClientResponse(currentFd.fd);
-                
-                // Check if response is complete
+                int wr = writeClientResponse(currentFd.fd);
+
+                // If write is still pending (partial or EAGAIN), keep POLLOUT enabled
+                if (wr == 1) {
+                    currentFd.events |= POLLOUT;
+                    continue;
+                }
+
+                // On fatal write error, remove client
+                if (wr == -1) {
+                    removeClient(i);
+                    continue;
+                }
+
+                // wr == 0 -> response fully written
                 std::map<int, SocketTracker>::iterator it = fdsTracker.find(currentFd.fd);
-                if (it != fdsTracker.end() && it->second.response.empty()) {
-                    // Response sent completely, switch back to reading
+                if (it == fdsTracker.end()) continue;
+
+                // Determine Connection header (case-insensitive value check)
+                const std::string connHdr = it->second.request_obj.getHeader("connection");
+                std::string connVal = connHdr;
+                for (size_t k = 0; k < connVal.size(); ++k) connVal[k] = std::tolower(connVal[k]);
+
+                if (connVal == "close" || it->second.WError || it->second.RError) {
+                    removeClient(i);
+                } else {
+                    // Keep-alive: clear request-specific state and return to POLLIN
+                    it->second.response.clear();
+                    it->second.raw_buffer.clear();
+                    // keep any pipelined bytes in raw_buffer so next request can be parsed
+                    it->second.request_obj.reset();
+                    it->second.headersParsed = false;
+                    it->second.consumedBytes = 0;
+                    it->second.error.clear();
+                    it->second.WError = 0;
+                    it->second.RError = 0;
                     currentFd.events = POLLIN;
-                    
-                    // If connection should be closed, remove client
-                    if (it->second.WError || it->second.RError) {
-                        removeClient(i);
-                    }
                 }
             }
         }
@@ -179,7 +222,7 @@ const char *monitorClient::monitorexception::what() const throw() {
 monitorClient::monitorexception::~monitorexception() throw() {}
 
 monitorClient::SocketTracker::SocketTracker() 
-    : WError(0), RError(0), lastActive(time(NULL)) {
+    : headersParsed(false), consumedBytes(0), WError(0), RError(0), lastActive(time(NULL)) {
     raw_buffer = "";
     response = "";
     error = "";
@@ -199,16 +242,20 @@ bool monitorClient::SocketTracker::hasTimedOut(time_t currentTime, time_t timeou
 }
 
 void monitorClient::checkTimeouts() {
-    std::cout << "Checking for timed out clients..." << std::endl;
     time_t now = time(NULL);
-    
+    // Print a per-client debug line including the client FD and current time
     for (size_t i = numberOfServers; i < fds.size(); i++) {
         int clientFd = fds[i].fd;
+        std::ostringstream ss;
+        ss << "[DEBUG] " << "Checking client fd=" << clientFd << " for timeout at " << std::ctime(&now);
+        std::cout << ss.str();
+
         TrackerIt it = fdsTracker.find(clientFd);
 
         if (it != fdsTracker.end() && it->second.hasTimedOut(now, CLIENT_TIMEOUT)) {
-            std::cout << "Client " << clientFd << " timed out after " 
-                      << (now - it->second.lastActive) << " seconds" << std::endl;
+            std::ostringstream ss2;
+            ss2 << "[WARN] " << "Client fd=" << clientFd << " timed out after " << (now - it->second.lastActive) << " seconds";
+            std::cout << ss2.str() << std::endl;
             
             it->second.RError = 408;
             it->second.WError = 1;

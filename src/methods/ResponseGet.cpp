@@ -20,8 +20,7 @@ ResponseGet::~ResponseGet()
 
 void ResponseGet::handle(){
     // Find the best matching route using longest-prefix matching (nginx-style)
-    std::cout << "hello in GET\n";
-    request.matchServerConfiguration();
+    
     const Config::RouteConfig *matched = NULL;
     const std::vector<Config::RouteConfig> &routes = request.serverConfig.routes;
     size_t best_len = 0;
@@ -38,6 +37,15 @@ void ResponseGet::handle(){
             }
         }
     }
+
+    // {
+    //     std::cout << "PATH is  -- >" << matched->path << "root is -- >" << matched->root << std::endl;
+        
+    //     const std::vector<std::string> &allowed = matched->accepted_methods;
+    //      for (std::vector<std::string>::const_iterator mit = allowed.begin(); mit != allowed.end(); ++mit){
+    //            std::cout << "method is  == " << *mit << std::endl;
+    //         }
+    // }
 
     // If route matched, ensure GET is allowed
     if (matched){
@@ -66,6 +74,20 @@ void ResponseGet::handle(){
         suffix = request.path.substr(matched->path.size());
     else
         suffix = request.path;
+
+    // If the request refers to the route root (empty suffix) and the route defines
+    // an index list like "index.html index.htm", use the first index as the suffix
+    if (suffix.empty() && matched && !matched->index.empty()){
+        // tokenize by whitespace and pick the first non-empty token
+        std::istringstream iss(matched->index);
+        std::string first;
+        if (iss >> first){
+            if (!first.empty()){
+                if (first.front() != '/') suffix = std::string("/") + first;
+                else suffix = first;
+            }
+        }
+    }
 
     // Normalize root (remove trailing slash) and ensure suffix begins with '/'
     std::string fsPath = root;

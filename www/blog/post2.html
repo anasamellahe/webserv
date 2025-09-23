@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Handling uploads and downloads safely</title>
+  <link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1 class="brand">Sami Static — Blog</h1>
+      <nav class="main-nav">
+        <a href="/">Home</a>
+        <a href="/blog/">Blog</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="panel">
+      <h1>Handling uploads and downloads safely</h1>
+      <p class="muted">On this demo server the <code>/uploads</code> route accepts POST/DELETE/GET. The server enforces per-server size limits and returns friendly error pages on errors.</p>
+      <p>Use the contact form to upload a file. You can DELETE an uploaded file by sending an HTTP DELETE request to <code>/uploads/&lt;filename&gt;</code>.</p>
+      <p><a href="/blog/" class="muted">← Back to blog</a></p>
+    </article>
+  </main>
+</body>
+</html>

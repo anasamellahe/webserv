@@ -5,7 +5,7 @@ Request::Request() {
     this->clientFD = -1;
     this->is_valid = false;
     this->is_chunked = false;
-    this->Port = 0;
+    this->Port = -1;
     this->isIp = false;
     this->is_Complete = false;
     this->configSet = false;  // Initialize server config flag
@@ -16,7 +16,7 @@ Request::Request(int clientFD) {
     this->clientFD = clientFD;
     this->is_valid = false;
     this->is_chunked = false;
-    this->Port = 0;
+    this->Port = -1;
     this->isIp = false;
     this->is_Complete = false;
     this->configSet = false;  // Initialize server config flag
@@ -34,7 +34,7 @@ void Request::reset() {
     this->error_code.clear();
     this->Host.clear();
     this->is_Complete = false;
-    this->Port = 0;
+    this->Port = -1;
     this->isIp = false;
     this->query_params.clear();
     this->uploads.clear();
@@ -48,116 +48,264 @@ void Request::reset() {
 }
 
 bool Request::parseFromSocket(int clientFD, const std::string& buffer, size_t size) {
-    // Reset parsing state to avoid leftover errors from previous requests
+    // Back-compat helper: delegate to split parsing
     this->reset();
     this->clientFD = clientFD;
     this->requestContent = buffer.substr(0, size);
-    
     try {
         size_t header_end = this->requestContent.find("\r\n\r\n");
-        if (header_end == std::string::npos) {
-            return false;
-        }
-        
-        std::string headers_section = this->requestContent.substr(0, header_end);
-        
-        std::vector<std::string> header_lines;
-        size_t pos = 0;
-        size_t prev = 0;
-        while ((pos = headers_section.find("\r\n", prev)) != std::string::npos) {
-            header_lines.push_back(headers_section.substr(prev, pos - prev));
-            prev = pos + 2;
-        }
-        // push the final header line (the loop above misses the last line since headers_section
-        // does not include the trailing CRLF of the last header when extracted using header_end)
-        if (prev < headers_section.size()) {
-            header_lines.push_back(headers_section.substr(prev));
-        }
-        
-        if (header_lines.empty()) {
-            this->error_code = BAD_REQ;
-            return false;
-        }
+        if (header_end == std::string::npos) return false;
+        if (!parseHeadersSection(this->requestContent.substr(0, header_end))) return false;
+        std::string body = (header_end + 4 < this->requestContent.size()) ? this->requestContent.substr(header_end + 4) : std::string();
+        if (!parseBodySection(body)) return false;
+        return this->is_valid;
+    } catch (...) {
+        this->is_valid = false;
+        return false;
+    }
+}
 
-        // Merge folded headers (continuation lines starting with SP/HTAB)
-        std::vector<std::string> merged_lines;
-        for (size_t i = 0; i < header_lines.size(); ++i) {
-            const std::string &ln = header_lines[i];
-            if (!ln.empty() && (ln[0] == ' ' || ln[0] == '\t')) {
-                if (!merged_lines.empty()) {
-                    size_t cont = ln.find_first_not_of(" \t");
-                    std::string part = (cont == std::string::npos) ? std::string() : ln.substr(cont);
-                    if (!part.empty()) merged_lines.back() += std::string(" ") + part;
-                } else {
-                    // treat as a normal header if it's the first line
-                    merged_lines.push_back(ln);
-                }
+bool Request::parseHeadersSection(const std::string& headers_section) {
+    std::vector<std::string> header_lines;
+    size_t pos = 0, prev = 0;
+    while ((pos = headers_section.find("\r\n", prev)) != std::string::npos) {
+        header_lines.push_back(headers_section.substr(prev, pos - prev));
+        prev = pos + 2;
+    }
+    if (prev < headers_section.size()) header_lines.push_back(headers_section.substr(prev));
+    if (header_lines.empty()) { this->error_code = BAD_REQ; return false; }
+
+    std::vector<std::string> merged;
+    for (size_t i = 0; i < header_lines.size(); ++i) {
+        const std::string &ln = header_lines[i];
+        if (!ln.empty() && (ln[0] == ' ' || ln[0] == '\t')) {
+            if (!merged.empty()) {
+                size_t cont = ln.find_first_not_of(" \t");
+                std::string part = (cont == std::string::npos) ? std::string() : ln.substr(cont);
+                if (!part.empty()) merged.back() += std::string(" ") + part;
             } else {
-                merged_lines.push_back(ln);
+                merged.push_back(ln);
             }
+        } else {
+            merged.push_back(ln);
         }
-        header_lines.swap(merged_lines);
+    }
+    header_lines.swap(merged);
 
-        try {
-            parseStartLine(header_lines[0]);
-        } catch (int e) {
-            this->is_valid = false;
+    try { parseStartLine(header_lines[0]); }
+    catch (...) { this->is_valid = false; return false; }
+
+    for (size_t i = 1; i < header_lines.size(); ++i) {
+        try { parseHeaders(header_lines[i]); }
+        catch (...) { this->is_valid = false; return false; }
+    }
+
+    size_t qpos = this->path.find('?');
+    if (qpos != std::string::npos) { this->path = this->path.substr(0, qpos); parseQueryString(); }
+    return true;
+}
+
+void Request::debugPrint() const {
+    std::cout << "---- Request debug dump ----\n";
+    std::cout << "clientFD: " << this->clientFD << "\n";
+    std::cout << "configSet: " << (this->configSet ? "true" : "false") << "\n";
+    std::cout << "requestContent(size): " << this->requestContent.size() << "\n";
+    std::cout << "Method: " << this->method << "\n";
+    std::cout << "Path: " << this->path << "\n";
+    std::cout << "Version: " << this->version << "\n";
+    std::cout << "Host: " << this->Host << "\n";
+    std::cout << "is_Complete: " << (this->is_Complete ? "true" : "false") << "\n";
+    std::cout << "Port: " << this->Port << "\n";
+    std::cout << "isIp: " << (this->isIp ? "true" : "false") << "\n";
+    std::cout << "is_valid: " << (this->is_valid ? "true" : "false") << "\n";
+    std::cout << "error_code: " << this->error_code << "\n";
+
+    std::cout << "Headers(" << this->headers.size() << "):\n";
+    for (ConstHeaderIterator it = this->headers.begin(); it != this->headers.end(); ++it) {
+        std::cout << "  " << it->first << ": " << it->second << "\n";
+    }
+
+    std::cout << "Body(size): " << this->body.size() << "\n";
+    if (!this->body.empty()) {
+        std::cout << " Body(truncated, 200 chars): ";
+        std::cout << this->body.substr(0, std::min((size_t)200, this->body.size())) << "\n";
+    }
+
+    std::cout << "Query params(" << this->query_params.size() << "):\n";
+    for (std::map<std::string, std::string>::const_iterator it = this->query_params.begin(); it != this->query_params.end(); ++it) {
+        std::cout << "  " << it->first << " = " << it->second << "\n";
+    }
+
+    std::cout << "Uploads(" << this->uploads.size() << "):\n";
+    for (std::map<std::string, FilePart>::const_iterator it = this->uploads.begin(); it != this->uploads.end(); ++it) {
+        std::cout << "  field: " << it->first << ", filename: " << it->second.filename << ", content-type: " << it->second.content_type << ", size: " << it->second.content.size() << "\n";
+    }
+
+    std::cout << "CGI extension: " << this->cgi_extension << "\n";
+    std::cout << "CGI env(" << this->cgi_env.size() << "):\n";
+    for (std::map<std::string, std::string>::const_iterator it = this->cgi_env.begin(); it != this->cgi_env.end(); ++it) {
+        std::cout << "  " << it->first << " = " << it->second << "\n";
+    }
+
+    char client_ip[INET_ADDRSTRLEN] = "";
+    if (this->client_addr.sin_family == AF_INET) {
+        inet_ntop(AF_INET, &(this->client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
+    }
+    std::cout << "client_addr: " << client_ip << ":" << ntohs(this->client_addr.sin_port) << "\n";
+
+    std::cout << "cookies(" << this->cookies.size() << "):\n";
+    for (std::map<std::string, std::string>::const_iterator it = this->cookies.begin(); it != this->cookies.end(); ++it) {
+        std::cout << "  " << it->first << " = " << it->second << "\n";
+    }
+
+    std::cout << "is_chunked: " << (this->is_chunked ? "true" : "false") << "\n";
+    std::cout << "chunks count: " << this->chunks.size() << "\n";
+
+    // Print a short summary of server config if present
+    if (!this->fullServerConfig.servers.empty()) {
+        std::cout << "fullServerConfig.servers count: " << this->fullServerConfig.servers.size() << "\n";
+    } else {
+        std::cout << "fullServerConfig: empty\n";
+    }
+
+    std::cout << "serverConfig summary:\n";
+    std::cout << "  host: " << this->serverConfig.host << "\n";
+    std::cout << "  ports(" << this->serverConfig.ports.size() << "):\n";
+    for (size_t i = 0; i < this->serverConfig.ports.size(); ++i) std::cout << "    " << this->serverConfig.ports[i] << "\n";
+    std::cout << "  server_names(" << this->serverConfig.server_names.size() << "):\n";
+    for (size_t i = 0; i < this->serverConfig.server_names.size(); ++i) std::cout << "    " << this->serverConfig.server_names[i] << "\n";
+
+    std::cout << "-----------------------------\n";
+}
+
+bool Request::parseBodySection(const std::string& body_section) {
+    // Delegate all body assembly/validation to parseBodyByType which will
+    // enforce Content-Length, handle chunked decoding, and then dispatch
+    // to the specific parsers based on content-type.
+    if (!parseBodyByType(body_section)) {
+        this->is_valid = false;
+        return false;
+    }
+
+    parseCookies();
+    extractCgiInfo();
+    validateRequest();
+    return this->is_valid;
+}
+
+bool Request::parseBodyByType(const std::string& raw_body_section) {
+    // If Transfer-Encoding: chunked -> attempt to decode the chunked payload
+    ConstHeaderIterator te = this->headers.find("transfer-encoding");
+    if (te != this->headers.end() && te->second.find("chunked") != std::string::npos) {
+        // parseChunkedTransfer will populate this->body on success
+        if (!parseChunkedTransfer(raw_body_section)) {
+            // incomplete or protocol error (parseChunkedTransfer sets error_code on fatal)
             return false;
         }
-
-        for (size_t i = 1; i < header_lines.size(); i++) {
-            try {
-                parseHeaders(header_lines[i]);
-            } catch (int e) {
-                this->is_valid = false;
+    } else {
+        // Enforce Content-Length if present
+        ConstHeaderIterator cl_it = this->headers.find("content-length");
+        if (cl_it != this->headers.end()) {
+            unsigned long expected_length = strtoul(cl_it->second.c_str(), NULL, 10);
+            if (raw_body_section.length() != expected_length) {
+                if (raw_body_section.length() < expected_length) {
+                    // incomplete body
+                    return false;
+                }
+                this->error_code = BAD_REQ;
                 return false;
             }
         }
-        
-        size_t query_pos = this->path.find('?');
-        if (query_pos != std::string::npos) {
-            std::string query_string = this->path.substr(query_pos + 1);
-            this->path = this->path.substr(0, query_pos);
-            parseQueryString();
-        }
-        
-        if (header_end + 4 < this->requestContent.length()) {
-            std::string body_data = this->requestContent.substr(header_end + 4);
-            
-            ConstHeaderIterator transfer_encoding = this->headers.find("transfer-encoding");
-            if (transfer_encoding != this->headers.end() && 
-                transfer_encoding->second.find("chunked") != std::string::npos) {
-                parseChunkedTransfer(body_data);
-            } else {
-                parseBody(body_data);
-            }
-        }
-        
-        parseCookies();
-        extractCgiInfo();
-        validateRequest();
-        
-        // If request is valid and we have a host header, perform server matching
-        if (this->is_valid && !this->Host.empty() && this->configSet) {
-            matchServerConfiguration();
-        }
-        
-    // leave error handling to caller; avoid spamming logs here
 
-        return this->is_valid;
+        // No chunked encoding: accept the provided raw body as the assembled body
+        this->body = raw_body_section;
     }
-    catch (int error_code) {
-        this->is_valid = false;
-        return false;
+
+    // At this point this->body contains the assembled payload. Now dispatch
+    // to the appropriate parser based on Content-Type.
+    ConstHeaderIterator it = this->headers.find("content-type");
+    std::string content_type = (it != this->headers.end()) ? it->second : std::string();
+
+    if (content_type.find("multipart/form-data") != std::string::npos) {
+        size_t boundary_pos = content_type.find("boundary=");
+        if (boundary_pos != std::string::npos) {
+            std::string boundary = content_type.substr(boundary_pos + 9);
+            if (!boundary.empty() && boundary[0] == '"' && boundary[boundary.length() - 1] == '"') {
+                if (boundary.length() >= 2)
+                    boundary = boundary.substr(1, boundary.length() - 2);
+            }
+            return parseBodyMultipart(this->body, boundary);
+        }
+        // no boundary -> treat as generic
+        return parseBodyGeneric(this->body, content_type);
     }
-    catch (const std::exception& e) {
-        this->is_valid = false;
-        return false;
+
+    if (content_type.find("application/x-www-form-urlencoded") != std::string::npos) {
+        return parseBodyUrlEncoded(this->body);
     }
-    catch (...) {
-        this->is_valid = false;
-        return false;
+
+    // Heuristic: if header present and starts with text/ or application/, treat as raw text
+    if (!content_type.empty()) {
+        if (content_type.find("text/") == 0 || content_type.find("application/json") != std::string::npos || content_type.find("application/xml") != std::string::npos) {
+            return parseBodyRaw(this->body);
+        }
+        // For octet-stream treat as binary
+        if (content_type.find("application/octet-stream") != std::string::npos) {
+            return parseBodyBinary(this->body);
+        }
     }
+
+    // Fallback: generic parser
+    return parseBodyGeneric(this->body, content_type);
+}
+
+bool Request::parseBodyMultipart(const std::string& body_data, const std::string& boundary) {
+    // Reuse existing multipart parser
+    return parseMultipartBody(body_data, boundary);
+}
+
+bool Request::parseBodyUrlEncoded(const std::string& body_data) {
+    return parseFormData(body_data);
+}
+
+bool Request::parseBodyRaw(const std::string& body_data) {
+    // store as-is
+    this->body = body_data;
+    return true;
+}
+
+bool Request::parseBodyBinary(const std::string& body_data) {
+    // store raw binary payload in body (as bytes in string)
+    this->body = body_data;
+    return true;
+}
+
+bool Request::parseBodyGeneric(const std::string& body_data, const std::string& content_type) {
+    // Default generic parsing: keep raw body and let higher-level handlers decide
+    (void)content_type;
+    this->body = body_data;
+    return true;
+}
+
+void Request::setChunked(bool ischunked)
+{
+    this->is_chunked = ischunked;
+}
+
+bool Request::hasChunkedEncoding() const {
+    ConstHeaderIterator it = this->headers.find("transfer-encoding");
+    return (it != this->headers.end() && it->second.find("chunked") != std::string::npos);
+}
+
+size_t Request::expectedContentLength() const {
+    ConstHeaderIterator it = this->headers.find("content-length");
+    if (it == this->headers.end()) return 0;
+    char *end = NULL;
+    unsigned long v = strtoul(it->second.c_str(), &end, 10);
+    if (end == it->second.c_str()) {
+        return 0;
+    }
+    return static_cast<size_t>(v);
 }
 
 void Request::setMethod(const std::string& method) {
@@ -434,8 +582,7 @@ bool Request::parseHeaders(const std::string& headers_text) {
     }
     
     key = headers_text.substr(0, pos);
-    stringToLower(key);
-    // Trim whitespace around key
+    // Trim whitespace around key first
     size_t kstart = key.find_first_not_of(" \t");
     size_t kend = key.find_last_not_of(" \t");
     if (kstart == std::string::npos) {
@@ -443,6 +590,8 @@ bool Request::parseHeaders(const std::string& headers_text) {
     } else {
         key = key.substr(kstart, kend - kstart + 1);
     }
+    // Normalize key to lowercase for canonical lookup
+    stringToLower(key);
 
     size_t valueStartIndex = headers_text.find_first_not_of(": \r\t\v\f", pos);
     if (valueStartIndex == std::string::npos) {
@@ -451,10 +600,14 @@ bool Request::parseHeaders(const std::string& headers_text) {
 
     // Header line passed in does not contain CRLF terminator here (we split by CRLF earlier)
     value = headers_text.substr(valueStartIndex);
-    // Remove any trailing CR or LF left in the line
-    while (!value.empty() && (value.back() == '\r' || value.back() == '\n'))
-        value.pop_back();
-    stringToLower(value);
+    // Trim whitespace around value and remove any trailing CR/LF
+    size_t vstart = value.find_first_not_of(" \t\r\n\v\f");
+    size_t vend = value.find_last_not_of(" \t\r\n\v\f");
+    if (vstart == std::string::npos) {
+        value.clear();
+    } else {
+        value = value.substr(vstart, vend - vstart + 1);
+    }
     if (!isValidKey(key) || !isValidValue(value)){
         if (this->error_code.empty())
             this->error_code = BAD_REQ;
@@ -483,7 +636,8 @@ bool Request::parseHeaders(const std::string& headers_text) {
         }
     }
     
-    this->headers.insert(std::pair<std::string, std::string>(key, value));
+    // Use assignment so repeated headers update the value (rather than silently failing insert)
+    this->headers[key] = value;
     return true;
 }
 
@@ -787,58 +941,90 @@ std::string Request::urlEncode(const std::string& str) {
 }
 
 bool Request::parseChunkedTransfer(const std::string& chunked_data) {
-    if (chunked_data.empty()) {
-        return true;
-    }
-    
+    // If nothing provided yet, treat as incomplete
+    if (chunked_data.empty()) return false;
+
     this->is_chunked = true;
+
+    std::vector<std::string> decoded_chunks;
+    std::string decoded_body;
+
     size_t pos = 0;
-    
-    while (pos < chunked_data.length()) {
+    const size_t len = chunked_data.length();
+
+    while (true) {
+        // find end of size line
         size_t crlf_pos = chunked_data.find("\r\n", pos);
         if (crlf_pos == std::string::npos) {
-            break;
+            // incomplete size line
+            return false;
         }
-        
+
         std::string size_line = chunked_data.substr(pos, crlf_pos - pos);
-        
-        size_t chunk_size = 0;
+        // trim whitespace
+        size_t sstart = size_line.find_first_not_of(" \t");
+        size_t send = size_line.find_last_not_of(" \t");
+        if (sstart == std::string::npos) {
+            this->error_code = BAD_REQ;
+            return false;
+        }
+        size_line = size_line.substr(sstart, send - sstart + 1);
+
+        // strip chunk extensions
+        size_t semi = size_line.find(';');
+        std::string size_token = (semi == std::string::npos) ? size_line : size_line.substr(0, semi);
+
+        // parse hex size
         char *endptr = NULL;
-        chunk_size = strtoul(size_line.c_str(), &endptr, 16);
-        if (endptr == size_line.c_str()) {
+        unsigned long chunk_size = strtoul(size_token.c_str(), &endptr, 16);
+        if (endptr == size_token.c_str()) {
             this->error_code = BAD_REQ;
             return false;
         }
-        
-        if (chunk_size == 0) {
-            pos = crlf_pos + 2;
-            size_t final_crlf = chunked_data.find("\r\n", pos);
-            if (final_crlf != std::string::npos) {
-            }
-            break;
-        }
-        
+
+        // move pos to payload start
         pos = crlf_pos + 2;
-        
-        if (pos + chunk_size + 2 > chunked_data.length()) {
-            return false;
+
+        // if terminating chunk
+        if (chunk_size == 0) {
+            // minimal terminator is an immediate CRLF after the 0-chunk (no trailers)
+            if (pos + 2 > len) return false; // need more data
+            if (chunked_data[pos] == '\r' && chunked_data[pos + 1] == '\n') {
+                // success
+                this->chunks.swap(decoded_chunks);
+                this->body.swap(decoded_body);
+                return true;
+            }
+            // otherwise trailers present; they must end with CRLFCRLF
+            size_t trailers_end = chunked_data.find("\r\n\r\n", pos);
+            if (trailers_end == std::string::npos) return false; // need more data
+            this->chunks.swap(decoded_chunks);
+            this->body.swap(decoded_body);
+            return true;
         }
-        
-        std::string chunk = chunked_data.substr(pos, chunk_size);
-        this->chunks.push_back(chunk);
-        this->body += chunk;
-        
+
+        // ensure we have payload + CRLF available
+        if (pos + chunk_size + 2 > len) return false; // incomplete payload
+
+        // extract payload
+        decoded_chunks.push_back(chunked_data.substr(pos, chunk_size));
+        decoded_body.append(chunked_data, pos, chunk_size);
+
         pos += chunk_size;
-        if (pos + 1 < chunked_data.length() && 
-            chunked_data[pos] == '\r' && chunked_data[pos + 1] == '\n') {
-            pos += 2;
-        } else {
+
+        // expect CRLF after payload
+        if (pos + 1 >= len || chunked_data[pos] != '\r' || chunked_data[pos + 1] != '\n') {
             this->error_code = BAD_REQ;
             return false;
         }
+        pos += 2; // move to next size line
+
+        // if we've consumed everything, wait for more (incomplete)
+        if (pos >= len) return false;
     }
-    
-    return true;
+
+    // unreachable
+    return false;
 }
 
 bool Request::extractCgiInfo() {
@@ -1082,7 +1268,6 @@ Config Request::getserverConfig(std::string host , int port, bool isIp) const
     return emptyConfig;
 }
 void Request::matchServerConfiguration() {
-    std::cout << "hello in matchServerConfiguration \n";
     // if (!this->configSet || this->Host.empty()) {
     //     return; // Can't match without config or host
     // }

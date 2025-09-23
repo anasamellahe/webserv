@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Contact — Sami Static Site</title>
+  <link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1 class="brand">Sami Static</h1>
+      <nav class="main-nav">
+        <a href="/">Home</a>
+        <a href="/about.html">About</a>
+        <a href="/blog/">Blog</a>
+      </nav>
+    </div>
+  </header>
+  <main class="container">
+    <section class="panel">
+      <h2>Get in touch</h2>
+      <form id="contactForm" enctype="multipart/form-data">
+        <label>Name: <input type="text" name="name" required></label><br>
+        <label>Email: <input type="email" name="email" required></label><br>
+        <label>Message:<br><textarea name="message" rows="6" cols="60"></textarea></label><br>
+        <label>Attachment: <input type="file" name="attachment"></label><br>
+        <button type="submit" class="btn">Send</button>
+      </form>
+      <div id="uploadStatus" class="muted" style="margin-top:8px"></div>
+      <p class="muted">Note: This demo posts to <code>/uploads</code> which is configured to accept POST and store uploaded files.</p>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <div class="container"><small>&copy; 2025 Sami Static Demo</small></div>
+  </footer>
+  <script src="/static/site.js"></script>
+</body>
+</html>

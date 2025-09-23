@@ -28,6 +28,8 @@ public:
         Request request_obj;      // Parsed HTTP request object
         std::string response;     // Generated HTTP response
         std::string raw_buffer;   // Raw incoming data buffer
+    bool headersParsed;       // Whether current request headers are parsed
+    size_t consumedBytes;     // Bytes consumed for the current parsed request
         int WError;              // Write error status
         int RError;              // Read error status  
         time_t lastActive;       // Last activity timestamp
@@ -130,7 +132,7 @@ private:
      * @param clientFd Client socket file descriptor
      * Handles partial writes and connection management
      */
-    void writeClientResponse(int clientFd);
+    int writeClientResponse(int clientFd);
 
     /**
      * @brief Checks all connections for timeout and handles timeouts

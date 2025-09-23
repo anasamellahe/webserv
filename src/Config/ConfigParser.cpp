@@ -93,6 +93,12 @@ int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& 
         }
         route.path = value;
     }
+
+    if (key == "root") {
+        if (!value.empty())
+            route.root = value;
+    }
+
     else if (key == "accepted_methods") {
         if (!route.accepted_methods.empty()) {
             std::cerr << "Error: Duplicate key 'accepted_methods' detected" << std::endl;
@@ -173,13 +179,12 @@ int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& 
             route.cgi_extensions.push_back(ext);
         }
     }
-    else if (key == "upload_path") {
+    else if (key == "upload_enabled") {
         if (route.upload_enabled) {
             std::cerr << "Error: Duplicate key 'upload_path' detected" << std::endl;
             return -1;
         }
-        route.upload_path = value;
-        route.upload_enabled = true;
+        route.upload_enabled =  (value == "true" ? true : false);
     }
     return 0;
 }

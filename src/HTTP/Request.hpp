@@ -148,6 +148,20 @@ class Request
          */
         bool parseBody(const std::string& body_data);
 
+    /**
+     * @brief Parse body based on content type (state-machine dispatch)
+     * @param body_data Raw body data (already assembled if chunked)
+     * @return true on success
+     */
+    bool parseBodyByType(const std::string& body_data);
+
+    // Type-specific body parsers
+    bool parseBodyMultipart(const std::string& body_data, const std::string& boundary);
+    bool parseBodyUrlEncoded(const std::string& body_data);
+    bool parseBodyRaw(const std::string& body_data);
+    bool parseBodyBinary(const std::string& body_data);
+    bool parseBodyGeneric(const std::string& body_data, const std::string& content_type);
+
         /**
          * @brief Parses multipart form data with specified boundary
          * @param body_data Raw multipart body data
@@ -221,6 +235,17 @@ class Request
          * @return true if host is valid, false otherwise
          */
         bool validateHost(const std::string& host);
+
+    // Split parsing API for multiplexed reader
+    // Parse start-line and header fields only (no body)
+    bool parseHeadersSection(const std::string& headers_section);
+
+    // Parse body based on headers (Content-Length or chunked), then cookies/CGI/validate
+    bool parseBodySection(const std::string& body_section);
+
+    // Helpers for body handling
+    bool hasChunkedEncoding() const;
+    size_t expectedContentLength() const;
 
     public:
         /**
@@ -453,6 +478,11 @@ class Request
          */
         bool isValid();
 
+    /**
+     * @brief Print the current request parsing state to stdout for debugging
+     */
+    void debugPrint() const;
+
         /**
          * @brief Resets all request data to initial state
          * Clears all parsed data but preserves connection-specific info
@@ -480,6 +510,8 @@ class Request
          */
         void setServerConfig(const Config& config);
 
+        void setChunked(bool ischunked);
+
         /**
          * @brief Gets the current server configuration
          * @return Reference to the server configuration
@@ -498,5 +530,6 @@ class Request
          * @return Pointer to the matched server config, or nullptr if no server matched
          */
         const Config::ServerConfig* getCurrentServer() const;
+
     
 };

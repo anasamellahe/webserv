@@ -22,20 +22,16 @@ void ResponseBase::buildError(int code,  std::string text){
 
 
 std::string ResponseBase::buildDefaultBodyError(int code){
-    // Try to find a custom error page in the matched server config
-    if (request.hasServerConfig()){
-        const Config::ServerConfig & srv = request.serverConfig;
-        const Config::ServerConfig::ConstErrorPagesIterator it = srv.error_pages.find(code);
-        if (it != srv.error_pages.end()){
-            // Read file content
-            std::string path = it->second;
-            std::string content = ReadFromFile(path);
-            if (!content.empty())
-                return content;
-        }
-    }
 
-    // Fallback default HTML body
+
+    const Config::ServerConfig & srv = request.serverConfig;
+    const Config::ServerConfig::ConstErrorPagesIterator it = srv.error_pages.find(code);
+    if (it != srv.error_pages.end()){
+        std::string path = it->second;
+        std::string content = ReadFromFile(path);
+        if (!content.empty())
+            return content;
+    }
     return GenerateDefaultError(code);
 }
 

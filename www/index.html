@@ -3,29 +3,67 @@
 <head>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width,initial-scale=1" />
-	<title>Webserv Test Page</title>
-	<link rel="stylesheet" href="css/style.css" />
+	<title>Sami Static — Home</title>
+	<link rel="stylesheet" href="/static/site.css">
 </head>
 <body>
-	<header>
-		<h1>Webserv Test Page</h1>
-		<p>This is a simple index page to test GET requests served from <code>www/</code>.</p>
+	<header class="site-header">
+		<div class="container">
+			<h1 class="brand">Sami Static</h1>
+			<nav class="main-nav">
+				<a href="/">Home</a>
+				<a href="/about.html">About</a>
+				<a href="/blog/">Blog</a>
+				<a href="/downloads/">Downloads</a>
+				<a href="/contact.html">Contact</a>
+				<a href="/admin/">Admin</a>
+			</nav>
+		</div>
 	</header>
-	<main>
-		<section>
-			<h2>Static Data</h2>
-			<p>If this page loads, static file serving is working.</p>
+
+	<main class="container">
+		<section class="hero">
+			<h2>Professional demo website served by webserv</h2>
+			<p>Browse the pages, download sample files, upload a file to <code>/uploads</code>, and try deleting uploaded files.</p>
+			<div class="cta">
+				<a class="btn" href="/blog/">Read the Blog</a>
+				<a class="btn outline" href="/downloads/">Downloads</a>
+			</div>
 		</section>
-		<section>
-			<h2>Examples</h2>
+
+		<section class="panel">
+			<h3>Upload manager</h3>
+			<p>Use the form to upload a file (POST /uploads). The list below is fetched from the server (directory listing) and supports direct download and delete.</p>
+			<form id="uploadForm" enctype="multipart/form-data">
+				<input type="file" name="file" id="uploadFile">
+				<button type="submit" class="btn">Upload</button>
+			</form>
+
+			<div id="uploadStatus" class="muted"></div>
+
+			<h4>Uploaded files</h4>
+			<ul id="uploadsList" class="file-list">
+				<li class="muted">Loading...</li>
+			</ul>
+		</section>
+
+		<section class="panel">
+			<h3>Quick links & examples</h3>
 			<ul>
-				<li><a href="index.html">/index.html</a></li>
-				<li><a href="css/style.css">/css/style.css</a></li>
+				<li><a href="/">Home</a></li>
+				<li><a href="/about.html">About</a></li>
+				<li><a href="/blog/post1.html">Blog post example</a></li>
+				<li><a href="/downloads/sample.txt">Download sample.txt</a></li>
 			</ul>
 		</section>
 	</main>
-	<footer>
-		<small>Generated for local testing</small>
+
+	<footer class="site-footer">
+		<div class="container">
+			<small>&copy; 2025 Sami Static Demo — professional static site showcase</small>
+		</div>
 	</footer>
+
+	<script src="/static/site.js"></script>
 </body>
 </html>
