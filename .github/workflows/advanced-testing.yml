@@ -547,11 +547,7 @@ jobs:
         echo "Testing resource limits..."
         
         # Test timeout behavior
-        timeout 10s nc localhost 8080 << EOF || echo "Timeout test completed"
-GET / HTTP/1.1
-Host: localhost
-
-EOF
+        echo -e "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n" | timeout 10s nc localhost 8080 || echo "Timeout test completed"
         
         kill $SERVER_PID 2>/dev/null || true
 
