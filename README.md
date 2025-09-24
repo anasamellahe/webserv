@@ -124,3 +124,6 @@ All pull requests trigger the full CI pipeline.
 ## License
 
 This project is part of the 42 School curriculum.
+# CI Pipeline Status
+
+This project includes comprehensive CI/CD automation.
