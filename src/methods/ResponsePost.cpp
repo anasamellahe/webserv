@@ -1,4 +1,5 @@
 #include "ResponsePost.hpp"
+#include "../CGI/CGIHandler.hpp"
 #include <sys/stat.h>
 #include <fstream>
 #include <sstream>
@@ -85,6 +86,28 @@ void ResponsePost::handle(){
             }
         }
     }
+
+    // If route enables CGI and the target path points to a CGI script, execute CGI with request body
+    // bool tryCgi = false;
+    // if (matched && matched->cgi_enabled) {
+    //     size_t dot = fsPath.find_last_of('.');
+    //     if (dot != std::string::npos) {
+    //         std::string ext = fsPath.substr(dot);
+    //         for (std::vector<std::string>::const_iterator eit = matched->cgi_extensions.begin(); eit != matched->cgi_extensions.end(); ++eit) {
+    //             if (ext == *eit) { tryCgi = true; break; }
+    //         }
+    //     }
+    // }
+    // if (tryCgi) {
+    //     CGIHandler cgi(request, request.serverConfig, *matched);
+    //     CGIHandler::Result r = cgi.run(fsPath, matched->cgi_pass);
+    //     setStatus(r.status_code, r.status_text);
+    //     for (std::map<std::string,std::string>::const_iterator it = r.headers.begin(); it != r.headers.end(); ++it){
+    //         addHeader(it->first, it->second);
+    //     }
+    //     body = r.body;
+    //     return;
+    // }
 
     // If multipart uploads were parsed, save each uploaded FilePart into upload directory
     const std::map<std::string, FilePart>& uploads = request.getUploads();

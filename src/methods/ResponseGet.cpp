@@ -1,4 +1,5 @@
 #include "ResponseGet.hpp"
+#include "../CGI/CGIHandler.hpp"
 #include <sys/stat.h>
 #include <fstream>
 #include <sstream>
@@ -197,6 +198,28 @@ void ResponseGet::handle(){
         body = buildDefaultBodyError(404);
         return;
     }
+
+    // If CGI is enabled on the matched route and the file extension matches, execute CGI
+    // bool isCgi = false;
+    // if (matched && matched->cgi_enabled) {
+    //     size_t dot = fsPath.find_last_of('.');
+    //     if (dot != std::string::npos) {
+    //         std::string ext = fsPath.substr(dot);
+    //         for (std::vector<std::string>::const_iterator eit = matched->cgi_extensions.begin(); eit != matched->cgi_extensions.end(); ++eit) {
+    //             if (ext == *eit) { isCgi = true; break; }
+    //         }
+    //     }
+    // }
+    // if (isCgi) {
+    //     CGIHandler cgi(request, request.serverConfig, *matched);
+    //     CGIHandler::Result r = cgi.run(fsPath, matched->cgi_pass);
+    //     setStatus(r.status_code, r.status_text);
+    //     for (std::map<std::string,std::string>::const_iterator it = r.headers.begin(); it != r.headers.end(); ++it){
+    //         addHeader(it->first, it->second);
+    //     }
+    //     body = r.body;
+    //     return;
+    // }
 
     std::string content = ReadFromFile(fsPath);
     if (content.empty()){
