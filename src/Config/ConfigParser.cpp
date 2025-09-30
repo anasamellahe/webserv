@@ -161,10 +161,10 @@ int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& 
         route.index = value;
     }
     else if (key == "cgi_pass" || key == "cgi_path") { // support alias cgi_path
-        if (route.cgi_enabled) {
-            std::cerr << "Error: Duplicate key 'cgi_pass' detected" << std::endl;
-            return -1;
-        }
+        // if (route.cgi_enabled) {
+        //     std::cerr << "Error: Duplicate key 'cgi_pass' detected" << std::endl;
+        //     return -1;
+        // }
         route.cgi_pass = value;
         route.cgi_enabled = true;
     }
@@ -259,7 +259,7 @@ int ConfigParser::parseConfigFile(const std::string& filename) {
                 currentRoute->directory_listing = false;
                 currentRoute->has_redirect = false;
                 currentRoute->redirect_code = 301;
-                currentRoute->cgi_enabled = false;
+                currentRoute->cgi_enabled = true;
                 currentRoute->upload_enabled = false;
                 if (currentServer && !currentServer->root.empty()) {
                     currentRoute->root = currentServer->root;

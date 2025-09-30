@@ -27,8 +27,7 @@ public:
     };
 
     CGIHandler(const Request &req,
-               const Config::ServerConfig &srv,
-               const Config::RouteConfig &route);
+               const Config::ServerConfig &srv);
     ~CGIHandler();
 
     // Execute CGI script located at resolvedScriptPath; interpreterPath optional (cgi_pass)
@@ -38,7 +37,7 @@ public:
 private:
     const Request &request;
     const Config::ServerConfig &server;
-    const Config::RouteConfig &route;
+    // const Config::RouteConfig &route;
 
     std::vector<std::string> buildEnv(const std::string &scriptPath) const;
     std::vector<char*> makeEnvp(const std::vector<std::string> &env) const;

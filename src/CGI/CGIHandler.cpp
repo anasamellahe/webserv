@@ -14,9 +14,8 @@ static std::string itos_long(long v) {
 }
 
 CGIHandler::CGIHandler(const Request &req,
-                       const Config::ServerConfig &srv,
-                       const Config::RouteConfig &rt)
-    : request(req), server(srv), route(rt) {}
+                       const Config::ServerConfig &srv)
+    : request(req), server(srv) {}
 
 CGIHandler::~CGIHandler() {}
 
