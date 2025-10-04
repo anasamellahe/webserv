@@ -27,7 +27,12 @@ std::vector<std::string> CGIHandler::buildEnv(const std::string &scriptPath) con
     env.push_back(std::string("REQUEST_METHOD=") + request.getMethod());
     env.push_back(std::string("SCRIPT_FILENAME=") + scriptPath);
     env.push_back(std::string("SCRIPT_NAME=") + request.getPath());
-    env.push_back(std::string("QUERY_STRING=") + request.getCGIEnv().find("QUERY_STRING")->second);
+    
+    // Safely extract QUERY_STRING from CGI environment
+    const std::map<std::string, std::string> &cgiEnv = request.getCGIEnv();
+    std::map<std::string, std::string>::const_iterator qsIt = cgiEnv.find("QUERY_STRING");
+    std::string queryString = (qsIt != cgiEnv.end()) ? qsIt->second : std::string();
+    env.push_back(std::string("QUERY_STRING=") + queryString);
 
     // Content headers
     const std::string &ct = request.getHeader("content-type");
@@ -82,14 +87,29 @@ void CGIHandler::freeCStringArray(std::vector<char*> &arr) const {
 }
 
 void CGIHandler::parseCgiOutput(const std::string &raw, Result &out) const {
-    // CGI output starts with headers terminated by CRLFCRLF
+    // CGI output starts with headers terminated by CRLFCRLF or \n\n
     std::string::size_type pos = raw.find("\r\n\r\n");
     std::string head, body;
+    
     if (pos == std::string::npos) {
-        // Some scripts may use just \n\n
+        // Try \n\n separator
         std::string::size_type pos2 = raw.find("\n\n");
         if (pos2 == std::string::npos) {
-            out.ok = false; return;
+            // No proper CGI header separator found
+            // Check if output starts with HTML or other non-header content
+            // If so, treat entire output as body with default Content-Type
+            if (raw.find("<html>") == 0 || raw.find("<!DOCTYPE") == 0 || raw.find("<?xml") == 0) {
+                // Looks like HTML/XML without headers - use entire output as body
+                out.status_code = 200;
+                out.status_text = "OK";
+                out.headers["Content-Type"] = "text/html; charset=utf-8";
+                out.body = raw;
+                out.ok = true;
+                return;
+            }
+            // Otherwise, parsing failed
+            out.ok = false;
+            return;
         }
         head = raw.substr(0, pos2);
         body = raw.substr(pos2 + 2);
@@ -126,6 +146,12 @@ void CGIHandler::parseCgiOutput(const std::string &raw, Result &out) const {
     } else {
         out.status_code = 200; out.status_text = "OK";
     }
+    
+    // Ensure Content-Type is set
+    if (out.headers.find("Content-Type") == out.headers.end()) {
+        out.headers["Content-Type"] = "text/html; charset=utf-8";
+    }
+    
     out.body = body;
     out.ok = true;
 }
@@ -133,6 +159,27 @@ void CGIHandler::parseCgiOutput(const std::string &raw, Result &out) const {
 CGIHandler::Result CGIHandler::run(const std::string &resolvedScriptPath,
                                    const std::string &interpreterPath) {
     Result result;
+    
+    // Determine effective interpreter path with fallback defaults
+    std::string effectiveInterpreter = interpreterPath;
+    if (effectiveInterpreter.empty()) {
+        // Extract extension from script path
+        std::string ext;
+        size_t dot = resolvedScriptPath.find_last_of('.');
+        if (dot != std::string::npos) {
+            ext = resolvedScriptPath.substr(dot);
+        }
+        
+        // Provide default interpreter paths for common CGI extensions
+        if (ext == ".php") {
+            effectiveInterpreter = "/usr/bin/php";
+        } else if (ext == ".py") {
+            effectiveInterpreter = "/usr/bin/python3";
+        } else if (ext == ".pl") {
+            effectiveInterpreter = "/usr/bin/perl";
+        }
+    }
+    
     int inpipe[2]; // parent writes body to child stdin
     int outpipe[2]; // child stdout to parent
     if (pipe(inpipe) == -1) return result;
@@ -148,16 +195,17 @@ CGIHandler::Result CGIHandler::run(const std::string &resolvedScriptPath,
         // Child
         dup2(inpipe[0], STDIN_FILENO);
         dup2(outpipe[1], STDOUT_FILENO);
+        dup2(outpipe[1], STDERR_FILENO); // Redirect stderr to stdout for debugging
         // close unused
         close(inpipe[1]); close(outpipe[0]);
 
         // Build env and argv
         std::vector<std::string> envv = buildEnv(resolvedScriptPath);
         std::vector<char*> envp = makeEnvp(envv);
-        std::vector<char*> argv = makeArgv(interpreterPath, resolvedScriptPath);
+        std::vector<char*> argv = makeArgv(effectiveInterpreter, resolvedScriptPath);
 
         // Exec
-        const char *execPath = interpreterPath.empty() ? resolvedScriptPath.c_str() : interpreterPath.c_str();
+        const char *execPath = effectiveInterpreter.empty() ? resolvedScriptPath.c_str() : effectiveInterpreter.c_str();
         execve(execPath, &argv[0], &envp[0]);
         // If execve fails
         _exit(127);
@@ -214,13 +262,25 @@ CGIHandler::Result CGIHandler::run(const std::string &resolvedScriptPath,
     int status = 0;
     waitpid(pid, &status, 0);
 
+    // Check if child exited abnormally
+    if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+        // Child exited with non-zero status, likely execution failed
+        result.status_code = 500;
+        result.status_text = "Internal Server Error";
+        result.body = "<html><body><h1>500 Internal Server Error</h1><p>CGI execution failed.</p></body></html>";
+        result.headers.clear();
+        result.headers["Content-Type"] = "text/html; charset=utf-8";
+        result.ok = false;
+        return result;
+    }
+
     if (!raw.empty()) {
         parseCgiOutput(raw, result);
     }
     if (!result.ok) {
         result.status_code = 500;
         result.status_text = "Internal Server Error";
-        result.body = "<html><body><h1>500 Internal Server Error</h1><p>CGI failed.</p></body></html>";
+        result.body = "<html><body><h1>500 Internal Server Error</h1><p>CGI parsing failed.</p></body></html>";
         result.headers.clear();
         result.headers["Content-Type"] = "text/html; charset=utf-8";
         result.ok = false;
