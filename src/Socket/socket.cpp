@@ -38,8 +38,8 @@ void sock::bindINET() {
         bindSocket.sin_port = htons(hosts[i].second);
         if (!inet_pton(AF_INET, hosts[i].first.c_str(), &bindSocket.sin_addr.s_addr))
             closeFDs("[ERROR] inet_pton fail");
-        // if (bind(sockFDs[i], (sockaddr *)&bindSocket, sizeof(bindSocket)) < 0)
-        //     closeFDs("[ERROR] fail to bound the socket");
+        if (bind(sockFDs[i], (sockaddr *)&bindSocket, sizeof(bindSocket)) < 0)
+            closeFDs("[ERROR] fail to bound the socket");
         if (listen(sockFDs[i], 100) == -1)
             closeFDs("[ERROR] fail to listen in  the server");
         std::cout << "Server: Socket bound successfully and start listening on port " << hosts[i].second << std::endl;

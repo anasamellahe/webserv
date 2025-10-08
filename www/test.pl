@@ -1,32 +1,57 @@
-#!/usr/bin/env perl
+#!/usr/bin/perl
 use strict;
 use warnings;
-use CGI;
 
-my $cgi = CGI->new;
+# Print CGI headers
+print "Content-Type: text/html\r\n\r\n";
 
-print $cgi->header('text/html');
-print $cgi->start_html('Perl CGI Test');
-print $cgi->h1('Perl CGI Test Script');
-print $cgi->p('This is a simple Perl CGI script for testing.');
+# Print HTML content
+print <<'EOF';
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Perl CGI Test</title>
+</head>
+<body>
+    <h1>Perl CGI Test Script</h1>
+    <p>This is a simple Perl CGI script for testing.</p>
+    
+    <h2>Request Information:</h2>
+EOF
 
-print $cgi->h2('Request Information:');
-print $cgi->p('Method: ' . $ENV{REQUEST_METHOD});
-print $cgi->p('Query String: ' . $ENV{QUERY_STRING});
-print $cgi->p('Remote Address: ' . $ENV{REMOTE_ADDR});
+# Print environment variables
+print "<p>Method: " . ($ENV{REQUEST_METHOD} || 'Unknown') . "</p>\n";
+print "<p>Query String: " . ($ENV{QUERY_STRING} || 'None') . "</p>\n";
+print "<p>Remote Address: " . ($ENV{REMOTE_ADDR} || 'Unknown') . "</p>\n";
+print "<p>Script Name: " . ($ENV{SCRIPT_NAME} || 'Unknown') . "</p>\n";
+print "<p>Server Name: " . ($ENV{SERVER_NAME} || 'Unknown') . "</p>\n";
 
-print $cgi->h2('Form Example:');
-print $cgi->start_form;
-print 'Name: ', $cgi->textfield('name'), $cgi->br;
-print 'Message: ', $cgi->textarea('message'), $cgi->br;
-print $cgi->submit('Submit');
-print $cgi->end_form;
+print <<'EOF';
+    
+    <h2>Form Example:</h2>
+    <form method="post" action="">
+        Name: <input type="text" name="name"><br><br>
+        Message: <textarea name="message"></textarea><br><br>
+        <input type="submit" value="Submit">
+    </form>
+    
+    <h2>All Environment Variables:</h2>
+    <ul>
+EOF
 
-if ($cgi->param()) {
-    print $cgi->h2('Form Data Received:');
-    foreach my $param ($cgi->param()) {
-        print $cgi->p("$param: " . $cgi->param($param));
-    }
+# Print all environment variables
+foreach my $key (sort keys %ENV) {
+    my $value = $ENV{$key} || '';
+    # HTML escape the values
+    $value =~ s/&/&amp;/g;
+    $value =~ s/</&lt;/g;
+    $value =~ s/>/&gt;/g;
+    $value =~ s/"/&quot;/g;
+    print "        <li><strong>$key:</strong> $value</li>\n";
 }
 
-print $cgi->end_html;
+print <<'EOF';
+    </ul>
+</body>
+</html>
+EOF
