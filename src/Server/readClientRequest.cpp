@@ -1,6 +1,5 @@
 #include "monitorClient.hpp"
 #include <unistd.h>
-#include <cerrno>
 #include <cstring>
 #include <sstream>
 #include <iostream>
@@ -48,7 +47,7 @@ int monitorClient::readChunkFromClient(int clientFd, std::string& buffer) {
         return bytesRead;
     } else if (bytesRead == 0) {
         return 0;
-    } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    } else if (bytesRead == -1) {
         return -1;
     } else {
         return -2;
@@ -66,7 +65,7 @@ int monitorClient::readClientRequest(int clientFd) {
     if (tracker.request_obj.getClientFD() != clientFd) {
         tracker.request_obj.setClientFD(clientFd);
     }
-    // 1) Drain reads until EAGAIN
+    // 1) Drain reads until no more data available
     std::string chunk;
     while (true) {
         int rr = readChunkFromClient(clientFd, chunk);
@@ -79,7 +78,7 @@ int monitorClient::readClientRequest(int clientFd) {
             if (tracker.raw_buffer.empty()) return 0;
             break;
         } else if (rr == -1) {
-            // EAGAIN
+            // No more data available
             break;
         } else {
             // fatal read error
@@ -190,6 +189,22 @@ int monitorClient::readClientRequest(int clientFd) {
          << " method=" << tracker.request_obj.getMethod()
          << " at " << std::ctime(&tnow);
      std::cout << ss.str();
+     
+     // Print detailed request information for debugging
+     std::cout << "[DEBUG] Request Details:" << std::endl;
+     std::cout << "  Method: " << tracker.request_obj.getMethod() << std::endl;
+     std::cout << "  Path: " << tracker.request_obj.getPath() << std::endl;
+     std::cout << "  Version: " << tracker.request_obj.getVersion() << std::endl;
+     std::cout << "  Content-Length: " << tracker.request_obj.getHeader("content-length") << std::endl;
+     std::cout << "  Content-Type: " << tracker.request_obj.getHeader("content-type") << std::endl;
+     std::cout << "  Host: " << tracker.request_obj.getHeader("host") << std::endl;
+     std::cout << "  User-Agent: " << tracker.request_obj.getHeader("user-agent") << std::endl;
+     std::cout << "  Connection: " << tracker.request_obj.getHeader("connection") << std::endl;
+     if (!tracker.request_obj.getBody().empty()) {
+         std::cout << "  Body length: " << tracker.request_obj.getBody().length() << " bytes" << std::endl;
+         std::cout << "  Body preview: " << tracker.request_obj.getBody().substr(0, 100) << std::endl;
+     }
+     std::cout << "[DEBUG] End request details" << std::endl;
     return 1;
 }
 
@@ -225,6 +240,8 @@ void monitorClient::generateSuccessResponse(SocketTracker& tracker) {
     Request &req = tracker.request_obj;
     const std::string &method = req.getMethod();
     try {
+
+              std::cout << "[INFO] Generating response for method: " << method << std::endl;
         if (method == "GET"){
             ResponseGet handler(req);
             tracker.response = handler.generate();
@@ -235,6 +252,7 @@ void monitorClient::generateSuccessResponse(SocketTracker& tracker) {
             ResponseDelete handler(req);
             tracker.response = handler.generate();
         } else {
+            std::cerr << "[ERROR] Unsupported HTTP method: " << method << std::endl;
             std::ostringstream b;
             b << "<html><body><h1>501 Not Implemented</h1><p>Method " << method << " not implemented.</p></body></html>";
             std::ostringstream resp;
@@ -305,8 +323,10 @@ int monitorClient::writeClientResponse(int clientFd) {
         if (!tracker.response.empty()) return 1; // partial remain
         // else fall-through: all data sent
     } else if (w == -1) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            // socket not ready now, try later
+        // Use fcntl to check if socket is non-blocking and would block
+        int flags = fcntl(clientFd, F_GETFL, 0);
+        if (flags != -1 && (flags & O_NONBLOCK)) {
+            // Assume would block if non-blocking
             return 1; // still pending
         }
         // fatal write error

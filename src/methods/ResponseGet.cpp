@@ -34,7 +34,7 @@ void ResponseGet::handle(){
             if (rpath.size() > best_len){
                 best_len = rpath.size();
                 matched = &(*it);
-                break;
+                // Continue checking all routes to find the longest match, don't break
             }
         }
     }
@@ -76,18 +76,9 @@ void ResponseGet::handle(){
     else
         suffix = request.path;
 
-    // If the request refers to the route root (empty suffix) and the route defines
-    // an index list like "index.html index.htm", use the first index as the suffix
-    if (suffix.empty() && matched && !matched->index.empty()){
-        // tokenize by whitespace and pick the first non-empty token
-        std::istringstream iss(matched->index);
-        std::string first;
-        if (iss >> first){
-            if (!first.empty()){
-                if (first.front() != '/') suffix = std::string("/") + first;
-                else suffix = first;
-            }
-        }
+    // For exact file matches like /auto/file, don't append anything extra
+    if (matched && matched->path == request.path && matched->index.empty()) {
+        suffix = "";
     }
 
     // Normalize root (remove trailing slash) and ensure suffix begins with '/'
@@ -95,16 +86,25 @@ void ResponseGet::handle(){
     if (!fsPath.empty() && fsPath.back() == '/') fsPath.pop_back();
     if (!suffix.empty() && suffix.front() != '/') fsPath += "/" + suffix; else fsPath += suffix;
 
+    // Debug output to see path construction
+    std::cout << "[DEBUG] Path construction for GET " << request.path << ":" << std::endl;
+    std::cout << "[DEBUG]   Route matched: " << (matched ? matched->path : "none") << std::endl;
+    std::cout << "[DEBUG]   Root: " << root << std::endl;
+    std::cout << "[DEBUG]   Suffix: " << suffix << std::endl;
+    std::cout << "[DEBUG]   Final fsPath: " << fsPath << std::endl;
+
     // Canonicalize fsPath and ensure it stays inside the root to prevent traversal
     char resolved_root[PATH_MAX];
     char resolved_target[PATH_MAX];
     if (realpath(root.c_str(), resolved_root) == NULL){
+        std::cout << "[DEBUG] realpath failed for root: " << root << std::endl;
         std::string stxt = "Not Found";
         setStatus(404, stxt);
         body = buildDefaultBodyError(404);
         return;
     }
     if (realpath(fsPath.c_str(), resolved_target) == NULL){
+        std::cout << "[DEBUG] realpath failed for fsPath: " << fsPath << std::endl;
         // target does not exist
         std::string stxt = "Not Found";
         setStatus(404, stxt);

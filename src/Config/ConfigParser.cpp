@@ -107,10 +107,7 @@ int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& 
         std::istringstream iss(value);
         std::string method;
         while (iss >> method) {
-            if (method != "GET" && method != "POST" && method != "DELETE") {
-                std::cerr << "Error: Invalid HTTP method: " << method << std::endl;
-                return -1;
-            }
+  
             for (size_t i = 0; i < route.accepted_methods.size(); i++) {
                 if (route.accepted_methods[i] == method) {
                     std::cerr << "Error: Duplicate HTTP method: " << method << std::endl;

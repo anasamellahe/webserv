@@ -340,7 +340,9 @@ void Request::setVersion(const std::string& version) {
 
 void Request::parseStartLine(const std::string& line) {
     size_t pos = std::string::npos;
-    const char* methods[] = {"GET", "POST", "DELETE", NULL};
+    // Allow parsing of common HTTP methods so they can get proper 501 responses
+    const char* methods[] = {"GET", "POST", "DELETE", "HEAD", "PUT", "PATCH", "OPTIONS", "TRACE", "CONNECT", NULL};
+    
     
     for (size_t i = 0; methods[i]; i++) {
         if ((pos = line.find(methods[i], 0)) != std::string::npos) {
@@ -1106,7 +1108,10 @@ bool Request::parseCookies() {
 }
 
 bool Request::validateMethod() const {
-    return (this->method == "GET" || this->method == "POST" || this->method == "DELETE");
+    // Allow common HTTP methods to pass parsing - 501 handling is done in response generation
+    return (this->method == "GET" || this->method == "POST" || this->method == "DELETE" ||
+            this->method == "HEAD" || this->method == "PUT" || this->method == "PATCH" ||
+            this->method == "OPTIONS" || this->method == "TRACE" || this->method == "CONNECT");
 }
 
 bool Request::validatePath() const {

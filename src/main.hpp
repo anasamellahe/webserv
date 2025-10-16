@@ -9,7 +9,6 @@
 #include <unistd.h>
 #include <exception>
 #include <poll.h>
-#include <errno.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
 

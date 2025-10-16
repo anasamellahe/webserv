@@ -4,10 +4,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <errno.h>
-#include <poll.h>
 #include <sstream>
-#include <cstring>
 
 static std::string itos_long(long v) {
     std::ostringstream ss; ss << v; return ss.str();
@@ -222,7 +219,8 @@ CGIHandler::Result CGIHandler::run(const std::string &resolvedScriptPath,
         while (off < (ssize_t)body.size()) {
             ssize_t w = write(inpipe[1], body.c_str() + off, body.size() - off);
             if (w == -1) {
-                if (errno == EINTR) continue;
+                // Write failed, but continue - CGI might not need the body
+                std::cout << "[CGI DEBUG] Write to CGI stdin failed, continuing..." << std::endl;
                 break;
             }
             off += w;
@@ -230,37 +228,65 @@ CGIHandler::Result CGIHandler::run(const std::string &resolvedScriptPath,
     }
     close(inpipe[1]);
 
-    // Read with a simple timeout using poll
+    // Read using non-blocking I/O with simple timeout loop
     std::string raw;
-    struct pollfd pfd;
-    pfd.fd = outpipe[0];
-    pfd.events = POLLIN;
-    const int timeout_ms = 5000; // 5s
     char buf[4096];
-    while (true) {
-        int pr = poll(&pfd, 1, timeout_ms);
-        if (pr == -1) {
-            if (errno == EINTR) continue;
+    
+    // Set non-blocking on output pipe
+    int flags = fcntl(outpipe[0], F_GETFL, 0);
+    fcntl(outpipe[0], F_SETFL, flags | O_NONBLOCK);
+    
+    const int max_wait_iterations = 50; // ~5 seconds with 100ms sleep
+    int iterations = 0;
+    bool timeout_reached = false;
+    
+    std::cout << "[CGI DEBUG] Starting to read from CGI process, timeout in ~5 seconds" << std::endl;
+    
+    while (iterations < max_wait_iterations) {
+        ssize_t r = read(outpipe[0], buf, sizeof(buf));
+        if (r > 0) {
+            raw.append(buf, r);
+            iterations = 0; // Reset counter when we get data
+            std::cout << "[CGI DEBUG] Read " << r << " bytes from CGI" << std::endl;
+        } else if (r == 0) {
+            // EOF - process finished
+            std::cout << "[CGI DEBUG] CGI process finished (EOF)" << std::endl;
             break;
+        } else if (r == -1) {
+            // For non-blocking reads, -1 with no data available is normal
+            // We'll just wait and try again
+            if (iterations % 10 == 0) { // Print every second
+                std::cout << "[CGI DEBUG] Waiting for CGI data... iteration " << iterations << "/50" << std::endl;
+            }
+            usleep(100000); // 100ms
+            iterations++;
+            continue;
         }
-        if (pr == 0) {
-            // timeout -> kill child
-            kill(pid, SIGKILL);
-            break;
-        }
-        if (pfd.revents & POLLIN) {
-            ssize_t r = read(outpipe[0], buf, sizeof(buf));
-            if (r > 0) raw.append(buf, r);
-            else if (r == 0) break; // EOF
-            else if (errno != EAGAIN && errno != EWOULDBLOCK) break;
-        } else {
-            break;
-        }
+    }
+    
+    if (iterations >= max_wait_iterations) {
+        timeout_reached = true;
+        std::cout << "[CGI DEBUG] TIMEOUT REACHED! Killing CGI process with SIGKILL" << std::endl;
+        kill(pid, SIGKILL);
     }
     close(outpipe[0]);
 
     int status = 0;
     waitpid(pid, &status, 0);
+
+    // Check for timeout and return 504 Gateway Timeout
+    if (timeout_reached) {
+        result.status_code = 504;
+        result.status_text = "Gateway Timeout";
+        result.body = "<html><head><title>504 Gateway Timeout</title></head>"
+                     "<body><h1>504 Gateway Timeout</h1>"
+                     "<p>The CGI script took too long to respond and was terminated.</p>"
+                     "</body></html>";
+        result.headers.clear();
+        result.headers["Content-Type"] = "text/html; charset=utf-8";
+        result.ok = false;
+        return result;
+    }
 
     // Check if child exited abnormally
     if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {

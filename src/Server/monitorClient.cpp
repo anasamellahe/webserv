@@ -2,7 +2,6 @@
 #include "../Socket/socket.hpp"
 
 #include <unistd.h>
-#include <cerrno>
 #include <cstring>
 #include <iostream>
 #include <fcntl.h>
@@ -33,10 +32,8 @@ monitorClient::monitorClient(sock serverSockets) : ServerConfig(serverSockets.ge
 void monitorClient::acceptNewClient(int serverFD) {
     int clientFd = accept(serverFD, NULL, NULL);
     if (clientFd == -1) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return;
-        }
-        throw monitorexception("[ERROR] accept fail: " + std::string(strerror(errno)));
+        std::cerr << "[ERROR] accept failed for serverFD=" << serverFD << std::endl;
+        return;
     }
     
     if (clientFd < 0) {
@@ -45,8 +42,9 @@ void monitorClient::acceptNewClient(int serverFD) {
     }
     
     if (fcntl(clientFd, F_SETFL, O_NONBLOCK) < 0) {
+        std::cerr << "[ERROR] fcntl failed for clientFd=" << clientFd << std::endl;
         close(clientFd);
-        throw monitorexception("[ERROR]: fcntl fail: " + std::string(strerror(errno)));
+        return;
     }
 
     pollfd serverPollFd;
@@ -69,14 +67,14 @@ void monitorClient::acceptNewClient(int serverFD) {
             return;
         }
         
-    // Log accepted connection with client FD and server FD
-    std::ostringstream ss;
-    ss << "[INFO] " << "Server (listen_fd=" << serverFD << ") accepted new connection (client_fd=" << clientFd << ")";
-    std::cout << ss.str() << std::endl;
+        // Log accepted connection with client FD and server FD
+        std::ostringstream ss;
+        ss << "[INFO] " << "Server (listen_fd=" << serverFD << ") accepted new connection (client_fd=" << clientFd << ")";
+        std::cout << ss.str() << std::endl;
     } catch (const std::exception& e) {
         std::cerr << "Exception while adding client " << clientFd << ": " << e.what() << std::endl;
         close(clientFd);
-        throw;
+        return;
     }
 }
 
@@ -107,8 +105,8 @@ void monitorClient::startEventLoop() {
         
         ready = poll(fds.data(), fds.size(), 100);
         if (ready == -1) {
-            if (errno == EINTR) continue;
-            throw monitorexception("[ERROR] poll fail: " + std::string(strerror(errno)));
+            perror("[ERROR] poll fail");
+            throw monitorexception("[ERROR] poll fail");
         }
         
         for (size_t i = 0; i < numberOfServers; i++) {
@@ -162,7 +160,7 @@ void monitorClient::startEventLoop() {
             if (currentFd.revents & POLLOUT) {
                 int wr = writeClientResponse(currentFd.fd);
 
-                // If write is still pending (partial or EAGAIN), keep POLLOUT enabled
+                // If write is still pending (partial write), keep POLLOUT enabled
                 if (wr == 1) {
                     currentFd.events |= POLLOUT;
                     continue;
