@@ -38,10 +38,16 @@ void ResponseGet::handle(){
             }
         }
     }
-
+    
 
     // If route matched, ensure GET is allowed; if the route defines no methods, treat as disallow-all
     if (matched){
+        if(matched->has_redirect)
+        {
+            addHeader("Location", matched->redirect_url);
+            body = buildDefaultBodyError(matched->redirect_code);
+            return;
+        }
         const std::vector<std::string> &allowed = matched->accepted_methods;
         bool okmethod = false;
         if (!allowed.empty()){
@@ -121,16 +127,16 @@ void ResponseGet::handle(){
 
     if ((st.st_mode & S_IFMT) == S_IFDIR){
         // If request path does not end with '/', redirect to path with trailing slash
-    if (request.path.empty() || request.path[request.path.size() - 1] != '/'){
-            std::string redirect_to = request.path;
-            if (redirect_to.empty() || redirect_to[0] != '/') redirect_to = "/" + redirect_to;
-            redirect_to += "/";
-            std::string stxt = "Moved Permanently";
-            setStatus(301, stxt);
-            addHeader("Location", redirect_to);
-            body = buildDefaultBodyError(301);
-            return;
-        }
+    // if (request.path.empty() || request.path[request.path.size() - 1] != '/'){
+    //         std::string redirect_to = request.path;
+    //         if (redirect_to.empty() || redirect_to[0] != '/') redirect_to = "/" + redirect_to;
+    //         redirect_to += "/";
+    //         std::string stxt = "Moved Permanently";
+    //         setStatus(301, stxt);
+    //         addHeader("Location", redirect_to);
+    //         body = buildDefaultBodyError(301);
+    //         return;
+    //     }
         // Try index from matched route, then default index.html
         std::string indexFile;
         if (matched && !matched->index.empty()) indexFile = matched->index;
