@@ -1,5 +1,6 @@
 #include "monitorClient.hpp"
 #include "../Socket/socket.hpp"
+#include "../CGI/CGIHandler.hpp"
 
 #include <unistd.h>
 #include <cstring>
@@ -120,12 +121,102 @@ void monitorClient::startEventLoop() {
             
             pollfd& currentFd = fds[i];
             
-            // Handle incoming data (POLLIN)
+            // If this client is currently waiting on a CGI, skip reading from it
+            TrackerIt waitCgiIt = fdsTracker.find(currentFd.fd);
+            if (waitCgiIt != fdsTracker.end() && waitCgiIt->second.isCgiRequest && waitCgiIt->second.cgiOutputFd >= 0) {
+                // Ensure we don't read from this socket while CGI is running
+                currentFd.events &= ~POLLIN;
+            }
+            
+            // Check if this is a CGI output fd
+            bool isCgiFd = false;
+            int clientFdForCgi = -1;
+            for (TrackerIt tit = fdsTracker.begin(); tit != fdsTracker.end(); ++tit) {
+                if (tit->second.isCgiRequest && tit->second.cgiOutputFd == currentFd.fd) {
+                    isCgiFd = true;
+                    clientFdForCgi = tit->first;
+                    break;
+                }
+            }
+            
+            // Also handle POLLHUP/POLLERR to finalize short-lived scripts that close quickly
+            if (isCgiFd && (currentFd.revents & (POLLIN | POLLHUP | POLLERR))) {
+                // Handle CGI output
+                TrackerIt cgiTracker = fdsTracker.find(clientFdForCgi);
+                if (cgiTracker != fdsTracker.end() && cgiTracker->second.cgiHandler) {
+                    int cgiStatus = cgiTracker->second.cgiHandler->processCGIOutput();
+                    
+                    if (cgiStatus == 0) {
+                        // CGI completed successfully
+                        std::cout << "[CGI] CGI completed for client " << clientFdForCgi << std::endl;
+                        
+                        // Remove CGI fd from poll
+                        fds.erase(fds.begin() + i);
+                        
+                        // Generate response from CGI result
+                        CGIHandler::Result result = cgiTracker->second.cgiHandler->getResult();
+                        std::ostringstream resp;
+                        resp << "HTTP/1.1 " << result.status_code << " " << result.status_text << "\r\n";
+                        for (std::map<std::string,std::string>::const_iterator hit = result.headers.begin(); 
+                             hit != result.headers.end(); ++hit) {
+                            resp << hit->first << ": " << hit->second << "\r\n";
+                        }
+                        resp << "\r\n" << result.body;
+                        cgiTracker->second.response = resp.str();
+                        
+                        // Clean up CGI state
+                        delete cgiTracker->second.cgiHandler;
+                        cgiTracker->second.cgiHandler = NULL;
+                        cgiTracker->second.isCgiRequest = false;
+                        cgiTracker->second.cgiOutputFd = -1;
+                        
+                        // Enable POLLOUT for client to send response
+                        for (size_t j = numberOfServers; j < fds.size(); j++) {
+                            if (fds[j].fd == clientFdForCgi) {
+                                fds[j].events |= POLLOUT;
+                                break;
+                            }
+                        }
+                    } else if (cgiStatus == -1) {
+                        // CGI error or timeout
+                        std::cout << "[CGI] CGI failed for client " << clientFdForCgi << std::endl;
+                        
+                        // Remove CGI fd from poll
+                        fds.erase(fds.begin() + i);
+                        
+                        // Generate error response
+                        CGIHandler::Result result = cgiTracker->second.cgiHandler->getResult();
+                        std::ostringstream resp;
+                        resp << "HTTP/1.1 " << result.status_code << " " << result.status_text << "\r\n";
+                        resp << "Content-Type: text/html\r\n";
+                        resp << "Content-Length: " << result.body.size() << "\r\n";
+                        resp << "Connection: close\r\n\r\n";
+                        resp << result.body;
+                        cgiTracker->second.response = resp.str();
+                        
+                        // Clean up CGI state
+                        delete cgiTracker->second.cgiHandler;
+                        cgiTracker->second.cgiHandler = NULL;
+                        cgiTracker->second.isCgiRequest = false;
+                        cgiTracker->second.cgiOutputFd = -1;
+                        
+                        // Enable POLLOUT for client to send response
+                        for (size_t j = numberOfServers; j < fds.size(); j++) {
+                            if (fds[j].fd == clientFdForCgi) {
+                                fds[j].events |= POLLOUT;
+                                break;
+                            }
+                        }
+                    }
+                    // cgiStatus == 1 means still reading, continue polling
+                }
+                continue;
+            }
+            
+            // Handle incoming data (POLLIN) - regular client socket
             if (currentFd.revents & POLLIN) {
                 // If there's already a fully-parsed request and a pending response,
                 // avoid reading further from this socket until the response is sent.
-                // This prevents the reactor from reading pipelined bytes while the
-                // response is not yet written out.
                 std::map<int, SocketTracker>::iterator it_check = fdsTracker.find(currentFd.fd);
                 if (it_check != fdsTracker.end()) {
                     if (it_check->second.request_obj.isComplete() && !it_check->second.response.empty()) {
@@ -146,12 +237,30 @@ void monitorClient::startEventLoop() {
                         if (!it->second.error.empty()) {
                             generateErrorResponse(it->second);
                         } else {
-                            generateSuccessResponse(it->second);
+                            // Detect CGI before generating normal response
+                            std::string scriptPath, interpreterPath;
+                            if (shouldHandleAsCGI(it->second, scriptPath, interpreterPath)) {
+                                if (!it->second.isCgiRequest) {
+                                    it->second.isCgiRequest = true;
+                                    startAsyncCGI(it->second, currentFd.fd, scriptPath, interpreterPath);
+                                    // Stop reading from client while CGI is running
+                                    currentFd.events &= ~POLLIN;
+                                }
+                                // Do not generate response now; wait for CGI completion
+                            } else {
+                                generateSuccessResponse(it->second);
+                            }
                         }
                     }
                     // Arm writer if we have any response data queued (pipelining supported)
                     if (!it->second.response.empty()) {
                         currentFd.events |= POLLOUT;
+                    } else {
+                        // Ensure we are not arming POLLOUT when CGI is running
+                        if (it->second.isCgiRequest) {
+                            // Keep events as POLLIN; CGI pipe fd will trigger POLLIN when ready
+                            currentFd.events &= ~POLLOUT;
+                        }
                     }
                 }
             }
@@ -220,12 +329,19 @@ const char *monitorClient::monitorexception::what() const throw() {
 monitorClient::monitorexception::~monitorexception() throw() {}
 
 monitorClient::SocketTracker::SocketTracker() 
-    : headersParsed(false), consumedBytes(0), WError(0), RError(0), lastActive(time(NULL)) {
+    : headersParsed(false), consumedBytes(0), WError(0), RError(0), lastActive(time(NULL)),
+      isCgiRequest(false), cgiOutputFd(-1), cgiHandler(NULL) {
     raw_buffer = "";
     response = "";
     error = "";
 }
 
+monitorClient::SocketTracker::~SocketTracker() {
+    if (cgiHandler) {
+        delete cgiHandler;
+        cgiHandler = NULL;
+    }
+}
 
 bool monitorClient::shouldCheckTimeouts(time_t currentTime) {
     return (currentTime - lastTimeoutCheck >= TIMEOUT_CHECK_INTERVAL);

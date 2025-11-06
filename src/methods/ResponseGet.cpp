@@ -195,6 +195,8 @@ void ResponseGet::handle(){
     }
 
     // If CGI is enabled on the matched route and the file extension matches, execute CGI
+    // NOTE: We still use synchronous CGI execution here for backwards compatibility
+    // The async CGI integration is handled at the monitorClient level
      bool isCgi = false;
     if (matched && matched->cgi_enabled) {
         size_t dot = fsPath.find_last_of('.');

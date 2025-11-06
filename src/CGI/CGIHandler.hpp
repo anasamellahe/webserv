@@ -30,14 +30,49 @@ public:
                const Config::ServerConfig &srv);
     ~CGIHandler();
 
-    // Execute CGI script located at resolvedScriptPath; interpreterPath optional (cgi_pass)
+    // Synchronous execution (legacy - still available for backwards compatibility)
     Result run(const std::string &resolvedScriptPath,
                const std::string &interpreterPath);
+
+    // Asynchronous execution - new API
+    bool startCGI(const std::string &resolvedScriptPath,
+                  const std::string &interpreterPath);
+    
+    // Process available output from CGI (non-blocking)
+    // Returns: 1 = still running, 0 = completed, -1 = error/timeout
+    int processCGIOutput();
+    
+    // Get the result after CGI completes
+    Result getResult() const;
+    
+    // Get CGI output file descriptor for poll()
+    int getCGIOutputFd() const { return cgiOutputFd; }
+    
+    // Get CGI process ID
+    pid_t getCGIPid() const { return cgiPid; }
+    
+    // Check if CGI has timed out
+    bool hasTimedOut() const;
+    
+    // Kill CGI process and clean up
+    void killCGI();
 
 private:
     const Request &request;
     const Config::ServerConfig &server;
-    // const Config::RouteConfig &route;
+    
+    // Async CGI state
+    pid_t cgiPid;
+    int cgiOutputFd;
+    int cgiInputFd;
+    std::string cgiBuffer;
+    time_t startTime;
+    std::string resolvedScript;
+    std::string interpreter;
+    bool cgiStarted;
+    static const int CGI_TIMEOUT = 5; // 5 seconds
+    
+    Result asyncResult;
 
     std::vector<std::string> buildEnv(const std::string &scriptPath) const;
     std::vector<char*> makeEnvp(const std::vector<std::string> &env) const;

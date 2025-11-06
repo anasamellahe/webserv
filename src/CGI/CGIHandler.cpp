@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sstream>
+#include <signal.h>
 
 static std::string itos_long(long v) {
     std::ostringstream ss; ss << v; return ss.str();
@@ -12,9 +13,17 @@ static std::string itos_long(long v) {
 
 CGIHandler::CGIHandler(const Request &req,
                        const Config::ServerConfig &srv)
-    : request(req), server(srv) {}
+    : request(req), server(srv), cgiPid(-1), cgiOutputFd(-1), cgiInputFd(-1), 
+      startTime(0), cgiStarted(false) {}
 
-CGIHandler::~CGIHandler() {}
+CGIHandler::~CGIHandler() {
+    if (cgiOutputFd >= 0) close(cgiOutputFd);
+    if (cgiInputFd >= 0) close(cgiInputFd);
+    if (cgiPid > 0) {
+        kill(cgiPid, SIGKILL);
+        waitpid(cgiPid, NULL, 0);
+    }
+}
 
 std::vector<std::string> CGIHandler::buildEnv(const std::string &scriptPath) const {
     std::vector<std::string> env;
@@ -312,4 +321,160 @@ CGIHandler::Result CGIHandler::run(const std::string &resolvedScriptPath,
         result.ok = false;
     }
     return result;
+}
+
+bool CGIHandler::startCGI(const std::string &resolvedScriptPath,
+                          const std::string &interpreterPath) {
+    if (cgiStarted) return false;
+    
+    // Determine effective interpreter
+    std::string effectiveInterpreter = interpreterPath;
+    if (effectiveInterpreter.empty()) {
+        std::string ext;
+        size_t dot = resolvedScriptPath.find_last_of('.');
+        if (dot != std::string::npos) {
+            ext = resolvedScriptPath.substr(dot);
+        }
+        if (ext == ".php") effectiveInterpreter = "/usr/bin/php";
+        else if (ext == ".py") effectiveInterpreter = "/usr/bin/python3";
+        else if (ext == ".pl") effectiveInterpreter = "/usr/bin/perl";
+    }
+    
+    resolvedScript = resolvedScriptPath;
+    interpreter = effectiveInterpreter;
+    
+    int inpipe[2], outpipe[2];
+    if (pipe(inpipe) == -1) return false;
+    if (pipe(outpipe) == -1) { close(inpipe[0]); close(inpipe[1]); return false; }
+    
+    cgiPid = fork();
+    if (cgiPid == -1) {
+        close(inpipe[0]); close(inpipe[1]); close(outpipe[0]); close(outpipe[1]);
+        return false;
+    }
+    
+    if (cgiPid == 0) {
+        // Child process
+        dup2(inpipe[0], STDIN_FILENO);
+        dup2(outpipe[1], STDOUT_FILENO);
+        dup2(outpipe[1], STDERR_FILENO);
+        close(inpipe[1]); close(outpipe[0]);
+        
+        std::vector<std::string> envv = buildEnv(resolvedScriptPath);
+        std::vector<char*> envp = makeEnvp(envv);
+        std::vector<char*> argv = makeArgv(effectiveInterpreter, resolvedScriptPath);
+        
+        const char *execPath = effectiveInterpreter.empty() ? resolvedScriptPath.c_str() : effectiveInterpreter.c_str();
+        execve(execPath, &argv[0], &envp[0]);
+        _exit(127);
+    }
+    
+    // Parent process
+    close(inpipe[0]);
+    close(outpipe[1]);
+    
+    cgiInputFd = inpipe[1];
+    cgiOutputFd = outpipe[0];
+    
+    // Write request body asynchronously (non-blocking)
+    int flags = fcntl(cgiInputFd, F_GETFL, 0);
+    fcntl(cgiInputFd, F_SETFL, flags | O_NONBLOCK);
+    
+    const std::string &body = request.getBody();
+    if (!body.empty()) {
+        ssize_t written = write(cgiInputFd, body.c_str(), body.size());
+        (void)written; // Best effort write
+    }
+    close(cgiInputFd);
+    cgiInputFd = -1;
+    
+    // Make output non-blocking
+    flags = fcntl(cgiOutputFd, F_GETFL, 0);
+    fcntl(cgiOutputFd, F_SETFL, flags | O_NONBLOCK);
+    
+    startTime = time(NULL);
+    cgiStarted = true;
+    
+    std::cout << "[CGI] Started CGI process (pid=" << cgiPid << ", fd=" << cgiOutputFd << ")" << std::endl;
+    return true;
+}
+
+int CGIHandler::processCGIOutput() {
+    if (!cgiStarted || cgiOutputFd < 0) return -1;
+    
+    // Check timeout
+    if (hasTimedOut()) {
+        std::cout << "[CGI] Timeout reached for pid " << cgiPid << std::endl;
+        killCGI();
+        asyncResult.status_code = 504;
+        asyncResult.status_text = "Gateway Timeout";
+        asyncResult.body = "<html><head><title>504 Gateway Timeout</title></head>"
+                          "<body><h1>504 Gateway Timeout</h1>"
+                          "<p>The CGI script took too long to respond.</p></body></html>";
+        asyncResult.headers["Content-Type"] = "text/html; charset=utf-8";
+        asyncResult.ok = false;
+        return -1;
+    }
+    
+    // Try to read available data
+    char buf[4096];
+    ssize_t r = read(cgiOutputFd, buf, sizeof(buf));
+    
+    if (r > 0) {
+        cgiBuffer.append(buf, r);
+        std::cout << "[CGI] Read " << r << " bytes from CGI (pid=" << cgiPid << ")" << std::endl;
+        return 1; // Still reading
+    } else if (r == 0) {
+        // EOF - CGI finished
+        std::cout << "[CGI] CGI process finished (pid=" << cgiPid << ")" << std::endl;
+        close(cgiOutputFd);
+        cgiOutputFd = -1;
+        
+        int status = 0;
+        waitpid(cgiPid, &status, 0);
+        cgiPid = -1;
+        
+        // Parse output
+        if (!cgiBuffer.empty()) {
+            parseCgiOutput(cgiBuffer, asyncResult);
+        }
+        
+        if (!asyncResult.ok) {
+            asyncResult.status_code = 500;
+            asyncResult.status_text = "Internal Server Error";
+            asyncResult.body = "<html><body><h1>500 Internal Server Error</h1><p>CGI parsing failed.</p></body></html>";
+            asyncResult.headers["Content-Type"] = "text/html; charset=utf-8";
+        }
+        
+        return 0; // Completed
+    } else {
+        // EAGAIN or EWOULDBLOCK - no data available yet
+        return 1; // Still running
+    }
+}
+
+CGIHandler::Result CGIHandler::getResult() const {
+    return asyncResult;
+}
+
+bool CGIHandler::hasTimedOut() const {
+    if (!cgiStarted) return false;
+    return (time(NULL) - startTime) > CGI_TIMEOUT;
+}
+
+void CGIHandler::killCGI() {
+    if (cgiPid > 0) {
+        std::cout << "[CGI] Killing CGI process " << cgiPid << std::endl;
+        kill(cgiPid, SIGKILL);
+        waitpid(cgiPid, NULL, 0);
+        cgiPid = -1;
+    }
+    if (cgiOutputFd >= 0) {
+        close(cgiOutputFd);
+        cgiOutputFd = -1;
+    }
+    if (cgiInputFd >= 0) {
+        close(cgiInputFd);
+        cgiInputFd = -1;
+    }
 }

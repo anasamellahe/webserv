@@ -1,4 +1,5 @@
 #include "monitorClient.hpp"
+#include "../CGI/CGIHandler.hpp"
 #include <unistd.h>
 #include <cstring>
 #include <sstream>
@@ -62,6 +63,12 @@ int monitorClient::readClientRequest(int clientFd) {
     }
 
     SocketTracker& tracker = it->second;
+
+    // If this request is already complete (e.g., waiting for CGI), do not re-parse
+    if (tracker.request_obj.isComplete()) {
+        return 1;
+    }
+
     if (tracker.request_obj.getClientFD() != clientFd) {
         tracker.request_obj.setClientFD(clientFd);
     }
@@ -217,11 +224,14 @@ void monitorClient::generateErrorResponse(SocketTracker& tracker) {
 }
 
 void monitorClient::generateSuccessResponse(SocketTracker& tracker) {
+    // If CGI is already being handled for this tracker, do nothing
+    if (tracker.isCgiRequest) {
+        return;
+    }
     Request &req = tracker.request_obj;
     const std::string &method = req.getMethod();
     try {
-
-              std::cout << "[INFO] Generating response for method: " << method << std::endl;
+        std::cout << "[INFO] Generating response for method: " << method << std::endl;
         if (method == "GET"){
             ResponseGet handler(req);
             tracker.response = handler.generate();
@@ -246,6 +256,83 @@ void monitorClient::generateSuccessResponse(SocketTracker& tracker) {
         tracker.error = "500 Internal Server Error";
         generateErrorResponse(tracker);
     }
+}
+
+bool monitorClient::shouldHandleAsCGI(SocketTracker& tracker, std::string& scriptPath, std::string& interpreterPath) {
+    Request &req = tracker.request_obj;
+    const std::string &path = req.getPath();
+
+    // Find matching route
+    const Config::RouteConfig *matched = NULL;
+    const std::vector<Config::RouteConfig> &routes = req.serverConfig.routes;
+    size_t best_len = 0;
+    for (std::vector<Config::RouteConfig>::const_iterator it = routes.begin(); it != routes.end(); ++it){
+        const std::string &rpath = it->path;
+        if (rpath.empty()) continue;
+        if (path.compare(0, rpath.size(), rpath) == 0){
+            if (rpath.size() > best_len){
+                best_len = rpath.size();
+                matched = &(*it);
+            }
+        }
+    }
+
+    if (!matched || !matched->cgi_enabled) return false;
+
+    // Build filesystem path
+    std::string root = req.serverConfig.root;
+    if (matched && !matched->root.empty()) root = matched->root;
+
+    std::string suffix;
+    if (matched && !matched->path.empty() && path.compare(0, matched->path.size(), matched->path) == 0)
+        suffix = path.substr(matched->path.size());
+    else
+        suffix = path;
+
+    std::string fsPath = root;
+    if (!fsPath.empty() && fsPath[fsPath.size() - 1] == '/') fsPath.erase(fsPath.size() - 1);
+    if (!suffix.empty() && suffix[0] != '/') fsPath += "/" + suffix; else fsPath += suffix;
+
+    // Extension check
+    size_t dot = fsPath.find_last_of('.');
+    if (dot == std::string::npos) return false;
+    std::string ext = fsPath.substr(dot);
+
+    bool isCgi = false;
+    for (std::vector<std::string>::const_iterator eit = matched->cgi_extensions.begin(); eit != matched->cgi_extensions.end(); ++eit) {
+        if (ext == *eit) { isCgi = true; break; }
+    }
+    if (!isCgi) return false;
+
+    scriptPath = fsPath;
+    interpreterPath = matched->cgi_pass;
+    return true;
+}
+
+void monitorClient::startAsyncCGI(SocketTracker& tracker, int clientFd, const std::string& scriptPath, const std::string& interpreterPath) {
+    std::cout << "[CGI] Starting async CGI for client " << clientFd << std::endl;
+    tracker.cgiHandler = new CGIHandler(tracker.request_obj, tracker.request_obj.serverConfig);
+    if (!tracker.cgiHandler->startCGI(scriptPath, interpreterPath)) {
+        std::cerr << "[CGI] Failed to start CGI process" << std::endl;
+        delete tracker.cgiHandler;
+        tracker.cgiHandler = NULL;
+        tracker.isCgiRequest = false;
+        tracker.error = "500 Internal Server Error";
+        generateErrorResponse(tracker);
+        return;
+    }
+
+    tracker.cgiOutputFd = tracker.cgiHandler->getCGIOutputFd();
+
+    // Add CGI output fd to poll
+    pollfd cgiPollFd;
+    memset(&cgiPollFd, 0, sizeof(cgiPollFd));
+    cgiPollFd.fd = tracker.cgiOutputFd;
+    // Watch for POLLHUP to catch short-lived scripts that close immediately
+    // Also watch POLLERR to finalize on errors
+    cgiPollFd.events = POLLIN | POLLHUP | POLLERR;
+    cgiPollFd.revents = 0;
+    fds.push_back(cgiPollFd);
 }
 
 bool monitorClient::isRequestBodyComplete(SocketTracker& tracker, size_t headerEnd) {

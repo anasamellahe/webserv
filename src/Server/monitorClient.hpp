@@ -8,7 +8,10 @@
 #include "../HTTP/Request.hpp"
 #include "../Config/ConfigParser.hpp"
 
+// Forward declaration
+class CGIHandler;
 class sock;
+
 /**
  * @brief Client connection monitor and event handler class
  * 
@@ -28,17 +31,27 @@ public:
         Request request_obj;      // Parsed HTTP request object
         std::string response;     // Generated HTTP response
         std::string raw_buffer;   // Raw incoming data buffer
-    bool headersParsed;       // Whether current request headers are parsed
-    size_t consumedBytes;     // Bytes consumed for the current parsed request
+        bool headersParsed;       // Whether current request headers are parsed
+        size_t consumedBytes;     // Bytes consumed for the current parsed request
         int WError;              // Write error status
         int RError;              // Read error status  
         time_t lastActive;       // Last activity timestamp
         std::string error;       // Error message if any
 
+        // CGI-specific fields
+        bool isCgiRequest;       // True if this is a CGI request
+        int cgiOutputFd;         // CGI output pipe file descriptor
+        CGIHandler* cgiHandler;  // Pointer to CGI handler (owned by tracker)
+        
         /**
          * @brief Default constructor - initializes tracker with current time
          */
         SocketTracker();
+
+        /**
+         * @brief Destructor - cleans up CGI handler if present
+         */
+        ~SocketTracker();
 
         /**
          * @brief Updates the last activity timestamp to current time
@@ -203,6 +216,22 @@ private:
      * @param location Redirect target URL
      */
     void generateRedirectResponse(SocketTracker& tracker, int redirectCode, const std::string& location);
+
+    /**
+     * @brief Checks if a request should be handled as CGI
+     * @param tracker Reference to socket tracker
+     * @return true if request should use CGI, false otherwise
+     */
+    bool shouldHandleAsCGI(SocketTracker& tracker, std::string& scriptPath, std::string& interpreterPath);
+
+    /**
+     * @brief Starts asynchronous CGI execution for a request
+     * @param tracker Reference to socket tracker
+     * @param clientFd Client file descriptor
+     * @param scriptPath Path to CGI script
+     * @param interpreterPath Path to interpreter
+     */
+    void startAsyncCGI(SocketTracker& tracker, int clientFd, const std::string& scriptPath, const std::string& interpreterPath);
 
 public:
     /**
