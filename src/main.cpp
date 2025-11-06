@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
         int parse_config = config_parser.parseConfigFile(config_file);
         if (parse_config == 0) {
             config_parser.initializeServerListenAddresses();
-            // printConfig(config_parser.getConfigs());
+            printConfig(config_parser.getConfigs());
             
 
             // make sock constructor  accept a object of the config parser  class 

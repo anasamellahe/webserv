@@ -59,8 +59,11 @@ void ResponseDelete::handle(){
     else
         suffix = request.path;
     std::string fsPath = root;
-    if (!fsPath.empty() && fsPath.back() == '/') fsPath.pop_back();
-    if (!suffix.empty() && suffix.front() != '/') fsPath += "/" + suffix; else fsPath += suffix;
+    // C++98-compatible trimming of trailing slash
+    if (!fsPath.empty() && fsPath[fsPath.size() - 1] == '/')
+        fsPath.erase(fsPath.size() - 1);
+    // Ensure single slash between root and suffix
+    if (!suffix.empty() && suffix[0] != '/') fsPath += "/" + suffix; else fsPath += suffix;
 
     // Canonicalize and containment check
     char resolved_root[PATH_MAX];

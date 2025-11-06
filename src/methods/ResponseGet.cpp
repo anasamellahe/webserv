@@ -21,7 +21,7 @@ ResponseGet::~ResponseGet()
 
 void ResponseGet::handle(){
     // Find the best matching route using longest-prefix matching (nginx-style)
-    
+
     const Config::RouteConfig *matched = NULL;
     const std::vector<Config::RouteConfig> &routes = request.serverConfig.routes;
     size_t best_len = 0;
@@ -29,11 +29,17 @@ void ResponseGet::handle(){
         const std::string &rpath = it->path;
         if (rpath.empty()) continue;
         // ensure rpath is a prefix of request.path
+        std::cout << "REQUEST PATH: " << request.path << std::endl;
+        std::cout << "ROUTE PATH: " << rpath << std::endl;
+        std::string test = "anas";
+        std::string test2 = "anas/";
+        std::cout << "TEST: " << test2.compare(0, test.size(), test) << std::endl;
         if (request.path.compare(0, rpath.size(), rpath) == 0){
             // prefer longer (more specific) prefix
             if (rpath.size() > best_len){
                 best_len = rpath.size();
                 matched = &(*it);
+                std::cout << "MATCHED ROUTE: " << matched->path << std::endl;
                 // Continue checking all routes to find the longest match, don't break
             }
         }
@@ -83,8 +89,9 @@ void ResponseGet::handle(){
 
     // Normalize root (remove trailing slash) and ensure suffix begins with '/'
     std::string fsPath = root;
-    if (!fsPath.empty() && fsPath.back() == '/') fsPath.pop_back();
-    if (!suffix.empty() && suffix.front() != '/') fsPath += "/" + suffix; else fsPath += suffix;
+    // C++98-compatible trimming of trailing slash
+    if (!fsPath.empty() && fsPath[fsPath.size() - 1] == '/') fsPath.erase(fsPath.size() - 1);
+    if (!suffix.empty() && suffix[0] != '/') fsPath += "/" + suffix; else fsPath += suffix;
 
     // Debug output to see path construction
     std::cout << "[DEBUG] Path construction for GET " << request.path << ":" << std::endl;
@@ -132,7 +139,7 @@ void ResponseGet::handle(){
 
     if ((st.st_mode & S_IFMT) == S_IFDIR){
         // If request path does not end with '/', redirect to path with trailing slash
-        if (request.path.empty() || request.path.back() != '/'){
+    if (request.path.empty() || request.path[request.path.size() - 1] != '/'){
             std::string redirect_to = request.path;
             if (redirect_to.empty() || redirect_to[0] != '/') redirect_to = "/" + redirect_to;
             redirect_to += "/";

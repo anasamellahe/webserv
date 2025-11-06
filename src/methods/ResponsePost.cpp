@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctime>
 
 ResponsePost::ResponsePost(Request& request)
     : ResponseBase(request)
@@ -60,8 +61,11 @@ void ResponsePost::handle(){
     else
         suffix = request.path;
     std::string fsPath = root;
-    if (!fsPath.empty() && fsPath.back() == '/') fsPath.pop_back();
-    if (!suffix.empty() && suffix.front() != '/') fsPath += "/" + suffix; else fsPath += suffix;
+    // C++98-compatible trimming of trailing slash
+    if (!fsPath.empty() && fsPath[fsPath.size() - 1] == '/')
+        fsPath.erase(fsPath.size() - 1);
+    // Ensure single slash between root and suffix
+    if (!suffix.empty() && suffix[0] != '/') fsPath += "/" + suffix; else fsPath += suffix;
 
     // Canonicalize and containment check
     char resolved_root[PATH_MAX];
@@ -120,7 +124,7 @@ void ResponsePost::handle(){
         else uploadDir = request.serverConfig.root;
 
         // Ensure uploadDir has no trailing slash
-        if (!uploadDir.empty() && uploadDir.back() == '/') uploadDir.pop_back();
+    if (!uploadDir.empty() && uploadDir[uploadDir.size() - 1] == '/') uploadDir.erase(uploadDir.size() - 1);
 
         // Ensure directory exists (attempt to create if missing)
         struct stat stbuf;
@@ -136,7 +140,11 @@ void ResponsePost::handle(){
         for (std::map<std::string, FilePart>::const_iterator it = uploads.begin(); it != uploads.end(); ++it){
             const FilePart &fp = it->second;
             std::string filename = fp.filename;
-            if (filename.empty()) filename = "upload_" + std::to_string(time(NULL));
+            if (filename.empty()) {
+                std::ostringstream ts;
+                ts << time(NULL);
+                filename = std::string("upload_") + ts.str();
+            }
             std::string outPath = uploadDir + "/" + filename;
             std::ofstream ofs(outPath.c_str(), std::ios::out | std::ios::binary);
             if (!ofs){

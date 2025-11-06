@@ -1,5 +1,6 @@
 CXX = c++
-CXXFLAGS = -Wall -Wextra -Werror 
+CXXFLAGS = -Wall -Wextra -Werror  -std=c++98
+LDFLAGS = -no-pie
 
 NAME = webserv
 
@@ -14,7 +15,7 @@ INCLUDES = -I./src
 all: $(NAME)
 
 $(NAME): $(OBJS)
-		$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
+		$(CXX) $(CXXFLAGS) $(LDFLAGS) $(OBJS) -o $(NAME)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 		@mkdir -p $(dir $@)
