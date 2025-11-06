@@ -29,45 +29,34 @@ void ResponseGet::handle(){
         const std::string &rpath = it->path;
         if (rpath.empty()) continue;
         // ensure rpath is a prefix of request.path
-        std::cout << "REQUEST PATH: " << request.path << std::endl;
-        std::cout << "ROUTE PATH: " << rpath << std::endl;
-        std::string test = "anas";
-        std::string test2 = "anas/";
-        std::cout << "TEST: " << test2.compare(0, test.size(), test) << std::endl;
         if (request.path.compare(0, rpath.size(), rpath) == 0){
             // prefer longer (more specific) prefix
             if (rpath.size() > best_len){
                 best_len = rpath.size();
                 matched = &(*it);
-                std::cout << "MATCHED ROUTE: " << matched->path << std::endl;
                 // Continue checking all routes to find the longest match, don't break
             }
         }
     }
 
-    // {
-    //     std::cout << "PATH is  -- >" << matched->path << "root is -- >" << matched->root << std::endl;
-        
-    //     const std::vector<std::string> &allowed = matched->accepted_methods;
-    //      for (std::vector<std::string>::const_iterator mit = allowed.begin(); mit != allowed.end(); ++mit){
-    //            std::cout << "method is  == " << *mit << std::endl;
-    //         }
-    // }
 
-    // If route matched, ensure GET is allowed
+    // If route matched, ensure GET is allowed; if the route defines no methods, treat as disallow-all
     if (matched){
         const std::vector<std::string> &allowed = matched->accepted_methods;
+        bool okmethod = false;
         if (!allowed.empty()){
-            bool okmethod = false;
             for (std::vector<std::string>::const_iterator mit = allowed.begin(); mit != allowed.end(); ++mit){
                 if (*mit == "GET") { okmethod = true; break; }
             }
-            if (!okmethod){
-                std::string stxt = "Method Not Allowed";
-                setStatus(405, stxt);
-                body = buildDefaultBodyError(405);
-                return;
-            }
+        } else {
+            // Empty accepted_methods means none are allowed for this route
+            okmethod = false;
+        }
+        if (!okmethod){
+            std::string stxt = "Method Not Allowed";
+            setStatus(405, stxt);
+            body = buildDefaultBodyError(405);
+            return;
         }
     }
 
@@ -93,25 +82,18 @@ void ResponseGet::handle(){
     if (!fsPath.empty() && fsPath[fsPath.size() - 1] == '/') fsPath.erase(fsPath.size() - 1);
     if (!suffix.empty() && suffix[0] != '/') fsPath += "/" + suffix; else fsPath += suffix;
 
-    // Debug output to see path construction
-    std::cout << "[DEBUG] Path construction for GET " << request.path << ":" << std::endl;
-    std::cout << "[DEBUG]   Route matched: " << (matched ? matched->path : "none") << std::endl;
-    std::cout << "[DEBUG]   Root: " << root << std::endl;
-    std::cout << "[DEBUG]   Suffix: " << suffix << std::endl;
-    std::cout << "[DEBUG]   Final fsPath: " << fsPath << std::endl;
+
 
     // Canonicalize fsPath and ensure it stays inside the root to prevent traversal
     char resolved_root[PATH_MAX];
     char resolved_target[PATH_MAX];
     if (realpath(root.c_str(), resolved_root) == NULL){
-        std::cout << "[DEBUG] realpath failed for root: " << root << std::endl;
         std::string stxt = "Not Found";
         setStatus(404, stxt);
         body = buildDefaultBodyError(404);
         return;
     }
     if (realpath(fsPath.c_str(), resolved_target) == NULL){
-        std::cout << "[DEBUG] realpath failed for fsPath: " << fsPath << std::endl;
         // target does not exist
         std::string stxt = "Not Found";
         setStatus(404, stxt);

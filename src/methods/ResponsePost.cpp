@@ -35,20 +35,22 @@ void ResponsePost::handle(){
         }
     }
 
-    // Method check for POST
+    // Method check for POST (empty accepted_methods means disallow all)
     if (matched){
         const std::vector<std::string> &allowed = matched->accepted_methods;
+        bool ok = false;
         if (!allowed.empty()){
-            bool ok = false;
             for (std::vector<std::string>::const_iterator mit = allowed.begin(); mit != allowed.end(); ++mit){
                 if (*mit == "POST") { ok = true; break; }
             }
-            if (!ok){
-                setStatus(405, "Method Not Allowed");
-                addHeader("Allow", "");
-                body = buildDefaultBodyError(405);
-                return;
-            }
+        } else {
+            ok = false; // No methods defined -> none allowed
+        }
+        if (!ok){
+            setStatus(405, "Method Not Allowed");
+            addHeader("Allow", "");
+            body = buildDefaultBodyError(405);
+            return;
         }
     }
 

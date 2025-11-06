@@ -178,10 +178,6 @@ int monitorClient::readClientRequest(int clientFd) {
     }
     tracker.request_obj.setComplete(true);
 
-    // // Debug: print the fully-parsed request (headers + body and derived fields)
-    // std::cout << "[DEBUG] Full parsed request for client " << clientFd << ":\n";
-    // tracker.request_obj.debugPrint();
-
      // Log that the request was fully parsed (include HTTP method)
      time_t tnow = time(NULL);
      std::ostringstream ss;
@@ -189,22 +185,6 @@ int monitorClient::readClientRequest(int clientFd) {
          << " method=" << tracker.request_obj.getMethod()
          << " at " << std::ctime(&tnow);
      std::cout << ss.str();
-     
-     // Print detailed request information for debugging
-     std::cout << "[DEBUG] Request Details:" << std::endl;
-     std::cout << "  Method: " << tracker.request_obj.getMethod() << std::endl;
-     std::cout << "  Path: " << tracker.request_obj.getPath() << std::endl;
-     std::cout << "  Version: " << tracker.request_obj.getVersion() << std::endl;
-     std::cout << "  Content-Length: " << tracker.request_obj.getHeader("content-length") << std::endl;
-     std::cout << "  Content-Type: " << tracker.request_obj.getHeader("content-type") << std::endl;
-     std::cout << "  Host: " << tracker.request_obj.getHeader("host") << std::endl;
-     std::cout << "  User-Agent: " << tracker.request_obj.getHeader("user-agent") << std::endl;
-     std::cout << "  Connection: " << tracker.request_obj.getHeader("connection") << std::endl;
-     if (!tracker.request_obj.getBody().empty()) {
-         std::cout << "  Body length: " << tracker.request_obj.getBody().length() << " bytes" << std::endl;
-         std::cout << "  Body preview: " << tracker.request_obj.getBody().substr(0, 100) << std::endl;
-     }
-     std::cout << "[DEBUG] End request details" << std::endl;
     return 1;
 }
 
