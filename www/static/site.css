@@ -1,26 +1,108 @@
-/* Professional site-wide styles for the demo site */
-:root{
-	--accent:#1e6fa6;
-	--muted:#6b7280;
-	--bg:#f7fafc;
-	--card:#ffffff;
+/*
+ * site.css
+ * Central styles for the demo site and the blog.
+ * This file contains site-wide variables, header/footer, and a full set
+ * of blog-specific styles (list, post, sidebar, typography, code blocks).
+ */
+
+:root {
+	--accent: #1e6fa6;
+	--accent-600: #0b4f72;
+	--muted: #6b7280;
+	--bg: #f7fafc;
+	--card: #ffffff;
+	--max-width: 1100px;
+	--radius: 8px;
+	--shadow-1: 0 1px 3px rgba(0,0,0,0.04);
+	--shadow-2: 0 6px 18px rgba(16,24,40,0.06);
+	--text: #222;
 }
-*{box-sizing:border-box}
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; padding:0; color:#222; background:var(--bg); }
-.container{ max-width:1100px; margin:0 auto; padding:0 18px; }
-.site-header{ background:linear-gradient(90deg,var(--accent),#0b4f72); color:white; padding:18px 0; }
-.site-header .brand{ margin:0; display:inline-block; font-size:1.25rem; }
-.main-nav{ float:right; }
-.main-nav a{ color: #f6fbff; text-decoration:none; margin-left:18px; font-weight:600 }
-.hero{ background:var(--card); margin-top:18px; padding:24px; border-radius:8px; box-shadow:0 6px 18px rgba(16,24,40,0.06); }
-.panel{ background:var(--card); margin-top:18px; padding:18px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
-.cta{ margin-top:12px }
-.btn{ background:var(--accent); color:white; padding:10px 14px; border-radius:6px; text-decoration:none; display:inline-block }
-.btn.outline{ background:transparent; color:var(--accent); border:2px solid rgba(30,111,166,0.12); margin-left:8px }
-.muted{ color:var(--muted); font-size:0.95rem }
+
+/* Reset / base */
+* { box-sizing: border-box; }
+html,body { height: 100%; }
+body {
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+	margin: 0; padding: 0; color: var(--text); background: var(--bg);
+	-webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+}
+.container { max-width: var(--max-width); margin: 0 auto; padding: 0 18px; }
+
+/* Header */
+.site-header { background: linear-gradient(90deg,var(--accent),var(--accent-600)); color: white; padding: 18px 0; }
+.site-header .inner { display:flex; align-items:center; justify-content:space-between; }
+.site-header .brand { margin:0; display:inline-block; font-size:1.25rem; font-weight:700; }
+.main-nav { }
+.main-nav a { color: #f6fbff; text-decoration:none; margin-left:18px; font-weight:600; }
+
+/* Hero / panels */
+.hero { background: var(--card); margin-top: 18px; padding: 24px; border-radius: var(--radius); box-shadow: var(--shadow-2); }
+.panel { background: var(--card); margin-top: 18px; padding: 18px; border-radius: var(--radius); box-shadow: var(--shadow-1); }
+.muted { color: var(--muted); font-size:0.95rem; }
+
+.btn { background: var(--accent); color: white; padding: 10px 14px; border-radius: 6px; text-decoration:none; display:inline-block; }
+.btn.outline { background: transparent; color: var(--accent); border: 2px solid rgba(30,111,166,0.12); margin-left:8px; }
+
+/* Layout: blog list + sidebar */
+.blog-layout { display: flex; gap: 28px; margin-top: 18px; }
+.blog-main { flex: 1 1 700px; }
+.blog-sidebar { width: 300px; flex: 0 0 300px; }
+
+/* Blog list */
+.posts { list-style: none; padding: 0; margin: 0; }
+.post-card { background: var(--card); border-radius: var(--radius); padding: 18px; margin-bottom: 18px; box-shadow: var(--shadow-1); transition: transform .12s ease, box-shadow .12s ease; }
+.post-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-2); }
+.post-title { font-size: 1.5rem; margin: 0 0 6px 0; color: var(--accent-600); text-decoration: none; }
+.post-meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 12px; }
+.post-excerpt { color: #333; line-height: 1.6; }
+.post-tags { margin-top: 12px; }
+.tag { display:inline-block; background:#eef6fb; color:var(--accent-600); padding:6px 10px; margin-right:8px; border-radius:6px; font-size:0.85rem; text-decoration:none; }
+
+/* Single post */
+.post-article { background: var(--card); padding: 24px; border-radius: var(--radius); box-shadow: var(--shadow-1); }
+.post-article h1 { margin-top: 0; font-size:2rem; }
+.post-article .post-meta { margin-bottom: 18px; }
+.post-content { line-height: 1.75; color: #222; }
+.post-content img { max-width:100%; height:auto; display:block; margin: 16px 0; border-radius:6px; }
+
+/* Code blocks */
+pre, code { font-family: 'Courier New', Courier, monospace; background:#0f1724; color:#e6eef8; border-radius:6px; }
+pre { padding:14px; overflow:auto; margin:14px 0; }
+code.inline { background: #0f1724; padding:2px 6px; border-radius:4px; }
+
+/* Sidebar widgets */
+.widget { background: var(--card); padding: 16px; border-radius: 8px; margin-bottom: 18px; box-shadow: var(--shadow-1); }
+.widget h3 { margin: 0 0 12px 0; font-size:1.05rem; }
+.widget ul { list-style:none; padding:0; margin:0; }
+.widget li { padding:8px 0; border-bottom:1px solid #f1f5f9; }
+.widget a { color: var(--accent-600); text-decoration: none; }
+
+/* Footer */
+.site-footer { margin-top:24px; padding:18px 0; background:transparent; color:var(--muted); }
+
+/* Utilities */
+.center { text-align:center; }
+.muted-small { color:var(--muted); font-size:0.9rem; }
+
+/* Responsive */
+@media (max-width: 980px) {
+	.blog-layout { flex-direction: column; }
+	.blog-sidebar { width: auto; order: 2; }
+	.blog-main { order: 1; }
+}
+
+@media (max-width: 700px) {
+	.main-nav { display:block; margin-top:8px; }
+	.site-header .brand { display:block; }
+	.site-header .inner { flex-direction:column; align-items:flex-start; gap:10px; }
+}
+
+/* Small helpers for accessibility */
+.sr-only { position: absolute; left: -10000px; top: auto; width:1px; height:1px; overflow:hidden; }
+
+/* Legacy helpers kept for existing pages */
 .file-list{ list-style:none; padding:0; margin:8px 0 0 0 }
 .file-list li{ display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #f1f5f9 }
 .file-list a{ color:var(--accent); text-decoration:none }
-.file-actions button{ margin-left:8px }
-.site-footer{ margin-top:24px; padding:18px 0; background:transparent }
-@media(max-width:700px){ .main-nav{ float:none; margin-top:8px } .site-header .brand{ display:block } }
+
+/* End of blog/site styles */
