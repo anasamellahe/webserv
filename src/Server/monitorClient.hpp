@@ -82,7 +82,7 @@ private:
 
 
     // Timeout and chunk size constants
-    static const time_t CLIENT_TIMEOUT = 60;           // Client timeout (60 seconds)
+    static const time_t CLIENT_TIMEOUT = 15;           // Client timeout (15 seconds, reduced from 60)
     static const time_t TIMEOUT_CHECK_INTERVAL = 10;   // Timeout check interval
     static const size_t CHUNK_SIZE = 8192;             // Read chunk size (8KB)
     time_t lastTimeoutCheck;                           // Last timeout check time

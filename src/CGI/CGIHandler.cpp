@@ -245,7 +245,7 @@ CGIHandler::Result CGIHandler::run(const std::string &resolvedScriptPath,
     int flags = fcntl(outpipe[0], F_GETFL, 0);
     fcntl(outpipe[0], F_SETFL, flags | O_NONBLOCK);
     
-    const int max_wait_iterations = 50; // ~5 seconds with 100ms sleep
+    const int max_wait_iterations = 30; // ~5 seconds with 100ms sleep
     int iterations = 0;
     bool timeout_reached = false;
     

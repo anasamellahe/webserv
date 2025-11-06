@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <ctime>
+#include <sys/stat.h>
 
 // Response handlers
 #include "../methods/ResponseGet.hpp"
@@ -311,6 +312,15 @@ bool monitorClient::shouldHandleAsCGI(SocketTracker& tracker, std::string& scrip
 
 void monitorClient::startAsyncCGI(SocketTracker& tracker, int clientFd, const std::string& scriptPath, const std::string& interpreterPath) {
     std::cout << "[CGI] Starting async CGI for client " << clientFd << std::endl;
+    // Preflight: if script file does not exist, return 404 right away
+    struct stat st;
+    if (stat(scriptPath.c_str(), &st) == -1 || !S_ISREG(st.st_mode)) {
+        std::cerr << "[CGI] Script not found: " << scriptPath << std::endl;
+        tracker.error = "404 [CGI] Not Found";
+        tracker.isCgiRequest = false;
+        generateErrorResponse(tracker);
+        return;
+    }
     tracker.cgiHandler = new CGIHandler(tracker.request_obj, tracker.request_obj.serverConfig);
     if (!tracker.cgiHandler->startCGI(scriptPath, interpreterPath)) {
         std::cerr << "[CGI] Failed to start CGI process" << std::endl;
@@ -330,7 +340,7 @@ void monitorClient::startAsyncCGI(SocketTracker& tracker, int clientFd, const st
     cgiPollFd.fd = tracker.cgiOutputFd;
     // Watch for POLLHUP to catch short-lived scripts that close immediately
     // Also watch POLLERR to finalize on errors
-    cgiPollFd.events = POLLIN | POLLHUP | POLLERR;
+    cgiPollFd.events = POLLIN | POLLERR;
     cgiPollFd.revents = 0;
     fds.push_back(cgiPollFd);
 }

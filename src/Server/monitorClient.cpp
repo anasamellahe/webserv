@@ -144,6 +144,8 @@ void monitorClient::startEventLoop() {
                 // Handle CGI output
                 TrackerIt cgiTracker = fdsTracker.find(clientFdForCgi);
                 if (cgiTracker != fdsTracker.end() && cgiTracker->second.cgiHandler) {
+                    // Any activity from the CGI should keep the client connection alive
+                    updateClientActivity(clientFdForCgi);
                     int cgiStatus = cgiTracker->second.cgiHandler->processCGIOutput();
                     
                     if (cgiStatus == 0) {
@@ -157,10 +159,19 @@ void monitorClient::startEventLoop() {
                         CGIHandler::Result result = cgiTracker->second.cgiHandler->getResult();
                         std::ostringstream resp;
                         resp << "HTTP/1.1 " << result.status_code << " " << result.status_text << "\r\n";
+                        bool hasConn = false;
+                        size_t bodyLen = result.body.size();
                         for (std::map<std::string,std::string>::const_iterator hit = result.headers.begin(); 
                              hit != result.headers.end(); ++hit) {
+                            if (hit->first == "Connection") hasConn = true;
                             resp << hit->first << ": " << hit->second << "\r\n";
                         }
+                        // Add Content-Length if CGI didn't provide it (so we can close immediately)
+                        if (result.headers.find("Content-Length") == result.headers.end()) {
+                            resp << "Content-Length: " << bodyLen << "\r\n";
+                        }
+                        // Force close to avoid 60s keep-alive wait after CGI
+                        if (!hasConn) resp << "Connection: close\r\n";
                         resp << "\r\n" << result.body;
                         cgiTracker->second.response = resp.str();
                         
@@ -169,6 +180,8 @@ void monitorClient::startEventLoop() {
                         cgiTracker->second.cgiHandler = NULL;
                         cgiTracker->second.isCgiRequest = false;
                         cgiTracker->second.cgiOutputFd = -1;
+                        // Mark activity on completion to avoid any race with timeout checker
+                        updateClientActivity(clientFdForCgi);
                         
                         // Enable POLLOUT for client to send response
                         for (size_t j = numberOfServers; j < fds.size(); j++) {
@@ -188,6 +201,7 @@ void monitorClient::startEventLoop() {
                         CGIHandler::Result result = cgiTracker->second.cgiHandler->getResult();
                         std::ostringstream resp;
                         resp << "HTTP/1.1 " << result.status_code << " " << result.status_text << "\r\n";
+                        // Ensure minimal headers
                         resp << "Content-Type: text/html\r\n";
                         resp << "Content-Length: " << result.body.size() << "\r\n";
                         resp << "Connection: close\r\n\r\n";
@@ -199,11 +213,15 @@ void monitorClient::startEventLoop() {
                         cgiTracker->second.cgiHandler = NULL;
                         cgiTracker->second.isCgiRequest = false;
                         cgiTracker->second.cgiOutputFd = -1;
+                        // Mark activity to reflect we produced a response
+                        updateClientActivity(clientFdForCgi);
                         
                         // Enable POLLOUT for client to send response
                         for (size_t j = numberOfServers; j < fds.size(); j++) {
                             if (fds[j].fd == clientFdForCgi) {
                                 fds[j].events |= POLLOUT;
+                                // Mark write error so loop will close client after sending
+                                cgiTracker->second.WError = 1;
                                 break;
                             }
                         }
@@ -366,25 +384,44 @@ void monitorClient::checkTimeouts() {
 
         TrackerIt it = fdsTracker.find(clientFd);
 
+        // Skip timeout enforcement while a CGI is actively running for this client
+        if (it != fdsTracker.end() && it->second.isCgiRequest) {
+            continue;
+        }
+
         if (it != fdsTracker.end() && it->second.hasTimedOut(now, CLIENT_TIMEOUT)) {
             std::ostringstream ss2;
             ss2 << "[WARN] " << "Client fd=" << clientFd << " timed out after " << (now - it->second.lastActive) << " seconds";
             std::cout << ss2.str() << std::endl;
             
-            it->second.RError = 408;
-            it->second.WError = 1;
-            std::string timeoutHtml = "<html><body><h1>408 Request Timeout</h1>"
-                                     "<p>The server timed out waiting for the Request.</p></body></html>";
-            it->second.response = "HTTP/1.1 408 Request Timeout\r\n";
-            it->second.response += "Connection: close\r\n";
-            it->second.response += "Content-Type: text/html\r\n";
-            {
-                std::ostringstream tmp;
-                tmp << timeoutHtml.length();
-                it->second.response += "Content-Length: " + tmp.str() + "\r\n\r\n";
+            // Decide whether to emit 408 or silently close idle keep-alive
+            bool hasPartialRequest = (!it->second.headersParsed && !it->second.raw_buffer.empty())
+                                   || (it->second.headersParsed && !it->second.request_obj.isComplete());
+
+            if (hasPartialRequest) {
+                // Incomplete request -> send 408
+                it->second.RError = 408;
+                it->second.WError = 1;
+                std::string timeoutHtml = "<html><body><h1>408 Request Timeout</h1>"
+                                         "<p>The server timed out waiting for the Request.</p></body></html>";
+                it->second.response = "HTTP/1.1 408 Request Timeout\r\n";
+                it->second.response += "Connection: close\r\n";
+                it->second.response += "Content-Type: text/html\r\n";
+                {
+                    std::ostringstream tmp;
+                    tmp << timeoutHtml.length();
+                    it->second.response += "Content-Length: " + tmp.str() + "\r\n\r\n";
+                }
+                it->second.response += timeoutHtml;
+                fds[i].events = POLLOUT;
+            } else {
+                // Idle keep-alive connection -> close without sending 408
+                removeClient(static_cast<int>(i));
+                if (i > numberOfServers) {
+                    // Adjust index after removal so we don't skip next fd
+                    --i;
+                }
             }
-            it->second.response += timeoutHtml;
-            fds[i].events = POLLOUT;
         }
     }
     lastTimeoutCheck = now;
