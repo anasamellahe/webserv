@@ -122,25 +122,28 @@ int ConfigParser::parseRouteKeyValue(const std::string& key, const std::string& 
             std::cerr << "Error: Duplicate key 'redirect' detected" << std::endl;
             return -1;
         }
-        route.has_redirect = true;
-        size_t spacePos = value.find(' ');
-        if (spacePos != std::string::npos) {
-            std::string codeStr = value.substr(0, spacePos);
-            for (size_t i = 0; i < codeStr.length(); i++) {
-                if (!isdigit(codeStr[i])) {
-                    std::cerr << "Error: Redirect code must be a valid integer: " << codeStr << std::endl;
+        // Only enable redirect if value is not empty
+        if (!value.empty()) {
+            route.has_redirect = true;
+            size_t spacePos = value.find(' ');
+            if (spacePos != std::string::npos) {
+                std::string codeStr = value.substr(0, spacePos);
+                for (size_t i = 0; i < codeStr.length(); i++) {
+                    if (!isdigit(codeStr[i])) {
+                        std::cerr << "Error: Redirect code must be a valid integer: " << codeStr << std::endl;
+                        return -1;
+                    }
+                }
+                route.redirect_code = std::atoi(codeStr.c_str());
+                if(route.redirect_code <= 0 || route.redirect_code > __INT_MAX__) {
+                    std::cerr << "Error: Redirect code must be greater than 0 and less than " << __INT_MAX__ << ": " << codeStr << std::endl;
                     return -1;
                 }
+                route.redirect_url = value.substr(spacePos + 1);
+            } else {
+                route.redirect_code = 301;
+                route.redirect_url = value;
             }
-            route.redirect_code = std::atoi(codeStr.c_str());
-            if(route.redirect_code <= 0 || route.redirect_code > __INT_MAX__) {
-                std::cerr << "Error: Redirect code must be greater than 0 and less than " << __INT_MAX__ << ": " << codeStr << std::endl;
-                return -1;
-            }
-            route.redirect_url = value.substr(spacePos + 1);
-        } else {
-            route.redirect_code = 301;
-            route.redirect_url = value;
         }
     }
     else if (key == "directory_listing") {

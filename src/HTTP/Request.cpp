@@ -322,7 +322,7 @@ void Request::setPath(const std::string& path) {
         this->error_code = URI_T_LONG;
     }
     else if (this->path.empty() && !path.empty()) {
-        this->path = path;
+        this->path = urlDecode(path);  // Decode URL-encoded characters like %20
     }
     else if (error_code.empty()) {
         this->error_code = BAD_REQ;
